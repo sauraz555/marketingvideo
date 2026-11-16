@@ -99,7 +99,7 @@ body{margin:0;background:#0d0d0d;display:flex;flex-direction:column;align-items:
 
 /* pills */
 .pills{top:640px;text-align:center}
-.pills .title{display:inline-block;font-weight:900;font-size:64px;letter-spacing:.02em;text-transform:uppercase;color:var(--bad);background:var(--card);padding:10px 30px;border-radius:14px;margin-bottom:34px}
+.pills .title{display:inline-block;max-width:940px;font-weight:900;font-size:52px;letter-spacing:.02em;text-transform:uppercase;color:var(--bad);background:var(--card);padding:10px 30px;border-radius:14px;margin-bottom:34px}
 .pills .row{display:flex;flex-wrap:wrap;justify-content:center;gap:22px;padding:0 60px}
 .pill{display:inline-flex;align-items:center;gap:14px;background:var(--card);color:var(--ink);border:1px solid var(--cardline);border-radius:999px;padding:18px 34px;font-weight:700;font-size:42px;box-shadow:0 10px 30px rgba(0,0,0,.14)}
 .pill .x{width:40px;height:40px;border-radius:50%;background:var(--bad);color:#fff;display:inline-grid;place-items:center;font-size:26px;font-weight:900}
@@ -150,6 +150,21 @@ body{margin:0;background:#0d0d0d;display:flex;flex-direction:column;align-items:
 .quote .qt .hl{background:linear-gradient(rgba(255,214,10,.6),rgba(255,214,10,.6)) no-repeat left;background-size:0% 100%;padding:0 6px}
 .quote .by{margin-top:32px;font-weight:600;font-size:34px;color:var(--muted)}
 .quote .url{margin-top:10px;font-weight:500;font-size:28px;color:var(--accent)}
+
+/* photo: framed picture(s) dropped on screen (polaroid or card), over a blurred backdrop */
+.photo{top:300px;display:flex;justify-content:center}
+.photo .pf{position:relative;background:#fff;padding:24px 24px 30px;border-radius:10px;width:640px;box-shadow:0 40px 90px rgba(0,0,0,.45),0 6px 18px rgba(0,0,0,.25)}
+.photo .pf.polaroid{padding-bottom:112px}
+.photo .pf img,.photo .pf video{display:block;width:100%;height:760px;object-fit:cover;background:#ddd}
+.photo .pf .cp{position:absolute;left:0;right:0;bottom:28px;text-align:center;font-family:"Playfair Display",Georgia,serif;font-weight:700;font-size:46px;color:#1E1A16}
+.photo .pf.polaroid::before{content:"";position:absolute;top:-26px;left:50%;width:170px;height:52px;margin-left:-85px;background:rgba(255,236,170,.8);transform:rotate(-3deg);box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.photo .pf.card{border-radius:44px;padding:14px}
+.photo .pf.card img,.photo .pf.card video{border-radius:32px}
+.photo.multi{top:240px;height:1100px;display:block}
+.photo.multi .pf{position:absolute;width:560px}
+.photo.multi .pf img,.photo.multi .pf video{height:640px}
+.photo.multi .pf.polaroid{padding-bottom:110px}
+[data-presenter="1"] .photo{top:1100px;transform:scale(.55);transform-origin:50% 0}
 
 /* list */
 .list{top:420px;padding:0 90px}
@@ -237,6 +252,19 @@ body[data-alpha] #stage{background:transparent!important}
 [data-presenter="1"] .anchor.hero{top:240px}
 [data-presenter="1"] .anchor.bignum{top:240px}
 [data-presenter="1"] .anchor.badges{top:300px}
+/* backdrop: an image or video behind everything (replaces the blank gradient; next to a presenter it replaces the room) */
+#bds{position:absolute;inset:0;overflow:hidden}
+.bd-item{position:absolute;inset:0;overflow:hidden}
+.bd-item img,.bd-item video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:50% 50%}
+.bd-item .bd-dim{position:absolute;inset:0}
+[data-presenter="1"] #bds{display:none}
+body[data-alpha] #bds{display:block!important}
+body[data-layer="back"] #bds, body[data-layer="front"] #bds{display:none!important}
+body[data-layer="bd"] #vis, body[data-layer="bd"] #caps, body[data-layer="bd"] #brand{display:none!important}
+[data-bd="1"]{ --capink:#FFFFFF; --capshadow:0 4px 24px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.6); }
+[data-bd="1"] .bignum .num{color:#fff;text-shadow:var(--capshadow)}
+[data-bd="1"] #brand{color:#fff;text-shadow:var(--capshadow)}
+
 #controls{display:flex;gap:10px;align-items:center;color:#ddd;font:14px system-ui;width:min(430px,92vw)}
 #controls button{background:#333;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer}
 #controls input{flex:1}
@@ -247,6 +275,7 @@ body[data-alpha] #stage{background:transparent!important}
   <div id="stage">
     <div id="bg"><div class="blob" id="b1"></div><div class="blob" id="b2"></div></div>
     <div id="pwrap"><video id="pvideo" muted playsinline preload="auto"></video><div id="pshade"></div></div>
+    <div id="bds"></div>
     <div id="grain"></div>
     <div class="layer" id="vis"></div>
     <div class="layer" id="caps"></div>
@@ -367,6 +396,27 @@ const B = {
       tl.fromTo(el.querySelectorAll('.hl'),{backgroundSize:'0% 100%'},{backgroundSize:'100% 100%',duration:.7,ease:'power2.inOut'},t+(sc.at ?? 1.0));
     }, out(tl,t){ tl.to(el,{autoAlpha:0,y:-40,duration:.25},t-.25); } };
   },
+  photo(sc){
+    // src (or items:[{src, caption, tilt, x, y}] for a collage), style:'polaroid'|'card', caption (polaroid), tilt in degrees
+    const items = sc.items || [{src: sc.src, caption: sc.caption, tilt: sc.tilt}];
+    const multi = items.length > 1, style = sc.style || 'polaroid';
+    const layout = [[-170, 0, -5], [170, 330, 4], [-110, 680, -3]];
+    const mk = (it, i) => {
+      const media = /\.(mp4|webm|mov|m4v)$/i.test(it.src) ? `<video src="${esc(it.src)}" muted playsinline preload="auto" loop></video>` : `<img src="${esc(it.src)}">`;
+      const L = layout[i] || [0, 0, 0];
+      const pos = multi ? ` style="left:calc(50% + ${it.x ?? L[0]}px - 280px);top:${it.y ?? L[1]}px"` : '';
+      return `<div class="pf ${style}" data-tilt="${it.tilt ?? (multi ? L[2] : -4)}"${pos}>${media}${style === 'polaroid' && it.caption ? `<div class="cp">${esc(it.caption)}</div>` : ''}</div>`;
+    };
+    const el = h(`<div class="abs photo ${multi ? 'multi' : ''}">${items.map(mk).join('')}</div>`);
+    return { el, inn(tl,t,end){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
+      window.MEDIA_EXTRA = window.MEDIA_EXTRA || [];
+      el.querySelectorAll('video').forEach(v => window.MEDIA_EXTRA.push({v, t0: t, t1: end}));
+      el.querySelectorAll('.pf').forEach((f, i) => { const tilt = parseFloat(f.dataset.tilt);
+        tl.fromTo(f,{y:700,rotation:tilt+14,scale:.8,autoAlpha:0},{y:0,rotation:tilt,scale:1,autoAlpha:1,duration:.65,ease:'back.out(1.5)'},t+i*.35);
+        tl.to(f,{rotation:tilt+1.2,y:-12,duration:Math.max(.5,end-t-1.2),ease:'sine.inOut'},t+.9+i*.35);   // gentle float
+      });
+    }, out(tl,t){ tl.to(el,{autoAlpha:0,y:-60,duration:.3},t-.3); } };
+  },
   badges(sc){
     const el = h(`<div class="abs badges">${sc.items.map(i=>`<div class="badge"><div class="v">${esc(i.value)}</div><div class="l">${esc(i.label)}</div></div>`).join('')}</div>`);
     return { el, inn(tl,t){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
@@ -481,15 +531,43 @@ for (const [lane, list] of Object.entries(lanes)) {
   });
 }
 
+// ---- backdrops: S.backdrops = [{ src, t, end, zoom:[1,1.14], pan:'left'|'right'|'up'|'down', dim:.38, blur:0, fadeIn:.45, fadeOut:.45 }] ----
+const bdsEl = document.getElementById('bds'), BDV = [];
+(S.backdrops || []).forEach(bd => {
+  const t0 = bd.t ?? 0, t1 = bd.end ?? DUR, isVid = /\.(mp4|webm|mov|m4v)$/i.test(bd.src);
+  const item = h(`<div class="bd-item">${isVid ? `<video src="${esc(bd.src)}" muted playsinline preload="auto" loop></video>` : `<img src="${esc(bd.src)}">`}<div class="bd-dim"></div></div>`);
+  bdsEl.appendChild(item);
+  const m = item.querySelector('img,video'), z = bd.zoom || [1, 1.14], pan = bd.pan || 'none';
+  item.querySelector('.bd-dim').style.background = `rgba(6,16,36,${bd.dim ?? 0.38})`;
+  if (bd.blur) m.style.filter = `blur(${bd.blur}px)`;
+  gsap.set(item, {autoAlpha: 0});
+  const fi = bd.fadeIn ?? 0.45, fo = bd.fadeOut ?? 0.45;
+  TL.fromTo(item, {autoAlpha: 0}, {autoAlpha: 1, duration: fi}, t0);
+  TL.to(item, {autoAlpha: 0, duration: fo}, Math.max(t0 + fi, t1 - fo));
+  const dx = pan === 'left' ? [3, -3] : pan === 'right' ? [-3, 3] : [0, 0], dy = pan === 'up' ? [3, -3] : pan === 'down' ? [-3, 3] : [0, 0];
+  TL.fromTo(m, {scale: z[0], xPercent: dx[0], yPercent: dy[0]}, {scale: z[1], xPercent: dx[1], yPercent: dy[1], duration: Math.max(0.5, t1 - t0), ease: 'none'}, t0);
+  // focus: [from, to] in % = slow sideways drift across a wide (landscape) image so it fills the tall frame
+  if (bd.focus) TL.fromTo(m, {objectPosition: bd.focus[0] + '% 50%'}, {objectPosition: bd.focus[1] + '% 50%', duration: Math.max(0.5, t1 - t0), ease: 'none'}, t0);
+  // light-on-dark text while any backdrop is on screen
+  TL.set(stage, {attr: {'data-bd': '1'}}, t0);
+  const covered = tt => (S.backdrops || []).some(o => o !== bd && (o.t ?? 0) <= tt && (o.end ?? DUR) > tt);
+  if (!covered(t1)) TL.set(stage, {attr: {'data-bd': '0'}}, t1);
+  if (isVid) BDV.push({v: m, t0, t1});
+});
+
 // ---- presenter + audio sync for preview; the renderer seeks the video itself ----
 const pv = document.getElementById('pvideo'), voice = document.getElementById('voice');
-window.seekMedia = (t) => new Promise(res => {
-  if (!S.presenter || document.body.dataset.alpha) return res();
-  const target = Math.max(0, t + (S.presenterOffset || 0));
-  if (Math.abs(pv.currentTime - target) < 0.001) return res();
-  const done = () => { pv.removeEventListener('seeked', done); res(); };
-  pv.addEventListener('seeked', done); pv.currentTime = target; setTimeout(done, 3000);
-});
+window.seekMedia = (t) => {
+  const seekV = (v, target) => new Promise(res => {
+    if (Math.abs(v.currentTime - target) < 0.001) return res();
+    const done = () => { v.removeEventListener('seeked', done); res(); };
+    v.addEventListener('seeked', done); v.pause(); v.currentTime = target; setTimeout(done, 3000);
+  });
+  const jobs = [];
+  if (S.presenter && !document.body.dataset.alpha) jobs.push(seekV(pv, Math.max(0, t + (S.presenterOffset || 0))));
+  [...BDV, ...(window.MEDIA_EXTRA || [])].forEach(b => { if (t >= b.t0 - 0.05 && t <= b.t1 + 0.05 && b.v.duration) jobs.push(seekV(b.v, ((t - b.t0) % b.v.duration + b.v.duration) % b.v.duration)); });
+  return Promise.all(jobs);
+};
 
 function fit(){ const vp = document.getElementById('viewport'); stage.style.transform = `scale(${vp.offsetWidth/1080})`; }
 window.addEventListener('resize', fit); fit();

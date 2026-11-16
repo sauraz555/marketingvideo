@@ -2,6 +2,7 @@
 
 Run from the repo root:
   python tools/shorts.py new <name> --voice <voice.mp3> [--presenter <clip.mp4>]   # projects/<name>/
+  python tools/shorts.py config <name> --interactive   # project setup questions (asked first; answers saved in config.json)
   python tools/shorts.py segments <name>          # find the spoken lines in voice.mp3 -> segments.js
   python tools/shorts.py sheet <name>             # QA contact sheet of every scene -> projects/<name>/qa/sheet.jpg
   python tools/shorts.py render <name> [--music bg.mp3] [--fps 30]   # -> projects/<name>/output/<name>-1080x1920.mp4
@@ -32,6 +33,92 @@ def duration(path):
     return float(out.strip())
 
 
+# ---------- configuration (asked before anything else) ----------
+CONFIG_QUESTIONS = [
+    ("voice_language", "What language is the voiceover?", ["nepali", "english", "nepali + english mix"], "nepali + english mix"),
+    ("caption_language", "What language should the on-screen captions be?", ["english", "nepali", "same as the voice"], "english"),
+    ("voice_source", "Where does the voiceover come from?", ["i provide an audio file", "generate it with ElevenLabs", "the presenter's own audio"], "i provide an audio file"),
+    ("voice_name", "ElevenLabs voice name (only if generating; leave blank otherwise)", None, ""),
+    ("presenter", "Is there a person on camera?", ["no", "yes, footage provided"], "no"),
+    ("look", "Visual look", ["interlace", "dark", "warm"], "interlace"),
+    ("backdrop_mode", "Backdrops behind the scenes", ["images", "video clips", "mixed images and video", "none (plain background)"], "images"),
+    ("backdrop_tool", "Make the backdrops with", ["kling", "elevenlabs", "higgsfield", "bloom", "my own files"], "kling"),
+    ("backdrop_budget", "Spend limit for generated media (say the number and the unit, e.g. '1 USD' or '100 Kling credits')", None, "ask me before spending"),
+    ("length_seconds", "Target length in seconds", None, "45-60"),
+    ("music", "Background music", ["none", "my own licensed track"], "none"),
+    ("logo", "Logo file inside the project folder", None, "logo.png"),
+    ("sources", "Check facts on official pages and show the sources on screen?", ["yes", "no"], "yes"),
+    ("privacy", "Names and personal details", ["no client names", "names are allowed"], "no client names"),
+]
+CONFIG_OPTIONAL = {"voice_name"}
+
+
+def config_path(p):
+    return pathlib.Path(p) / "config.json"
+
+
+def new_config():
+    return {"status": "needs-setup", "answers": {k: None for k, _, _, _ in CONFIG_QUESTIONS}}
+
+
+def load_config(p):
+    f = config_path(p)
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+
+
+def save_config(p, cfg):
+    missing = [k for k, _, _, _ in CONFIG_QUESTIONS if k not in CONFIG_OPTIONAL and cfg["answers"].get(k) in (None, "")]
+    cfg["status"] = "ready" if not missing else "needs-setup"
+    config_path(p).write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    return missing
+
+
+def configure(p, interactive=False, sets=(), redo=False):
+    cfg = load_config(p) or new_config()
+    for item in sets:
+        k, _, v = item.partition("=")
+        if k not in cfg["answers"]:
+            sys.exit("unknown setting '%s'. Settings: %s" % (k, ", ".join(cfg["answers"])))
+        cfg["answers"][k] = v.strip()
+    if interactive:
+        print("\nProject setup. Press Enter to accept the suggestion in [brackets].\n")
+        for key, question, choices, default in CONFIG_QUESTIONS:
+            if cfg["answers"].get(key) not in (None, "") and not redo:
+                continue
+            print(question)
+            for i, c in enumerate(choices or [], 1):
+                print("  %d) %s" % (i, c))
+            try:
+                raw = input("  [%s] > " % default).strip()
+            except EOFError:        # no real terminal (piped input): stop asking, leave the rest unanswered
+                print("(no terminal to ask in: answer later with --interactive or --set)")
+                break
+            if raw.isdigit() and choices and 1 <= int(raw) <= len(choices):
+                raw = choices[int(raw) - 1]
+            cfg["answers"][key] = raw or default
+            print()
+    missing = save_config(p, cfg)
+    print("configuration: %s" % cfg["status"])
+    for key, question, _, _ in CONFIG_QUESTIONS:
+        print("  %-18s %s" % (key, cfg["answers"].get(key) if cfg["answers"].get(key) not in (None, "") else "(not set)"))
+    if missing:
+        print("\nstill needed: %s\nanswer with:  python tools/shorts.py config <project> --interactive   or   --set key=value" % ", ".join(missing))
+    return cfg, missing
+
+
+def warn_config(p):
+    cfg = load_config(p)
+    if cfg is not None and cfg.get("status") != "ready":
+        print("WARNING: %s is not configured yet. Run: python tools/shorts.py config %s --interactive" % (pathlib.Path(p).name, pathlib.Path(p).name), file=sys.stderr)
+
+
+def cmd_config(a):
+    p = proj(a.project)
+    cfg, missing = configure(p, interactive=a.interactive, sets=a.set or [], redo=a.redo)
+    if missing:
+        sys.exit(1)
+
+
 # ---------- new ----------
 def cmd_new(a):
     dst = ROOT / "projects" / a.name
@@ -44,6 +131,11 @@ def cmd_new(a):
     if a.presenter:
         shutil.copy(a.presenter, dst / ("presenter" + pathlib.Path(a.presenter).suffix.lower()))
     print(f"created {dst}")
+    save_config(dst, new_config())
+    if sys.stdin.isatty():
+        configure(dst, interactive=True)
+    else:
+        print(f"configuration needed first: python tools/shorts.py config {a.name} --interactive   (or let the director agent ask you)")
     if a.voice:
         a.project = a.name
         cmd_segments(a)
@@ -137,6 +229,7 @@ async def sheet(p):
 
 
 def cmd_sheet(a):
+    warn_config(proj(a.project))
     asyncio.run(sheet(proj(a.project)))
 
 
@@ -174,14 +267,17 @@ async def frames_layered(p, out, fps, workers=4, start=None, end=None):
         pages = [await open_page(pw, p / "short.html", False, alpha=True) for _ in range(workers)]
         dur = await pages[0][1].evaluate("() => window.DUR")
         moves = await pages[0][1].evaluate("() => (window.SCRIPT && window.SCRIPT.moves) || []")
+        backdrops = await pages[0][1].evaluate("() => (window.SCRIPT && window.SCRIPT.backdrops) || []")
+        layers = ("bd", "back", "front") if backdrops else ("back", "front")
+        (out / "bd").mkdir(exist_ok=True)
         f0 = int(round((start or 0) * fps))
         f1 = min(int(round(dur * fps)), int(round((end if end is not None else dur) * fps)))
         done = [0]
 
         async def worker(k, browser, page):
             for i in range(f0 + k, f1, workers):
-                await page.evaluate("t => { TL.seek(t); }", i / fps)
-                for layer in ("back", "front"):
+                await page.evaluate("async t => { TL.seek(t); await window.seekMedia(t); }", i / fps)
+                for layer in layers:
                     await page.evaluate("l => { document.body.dataset.layer = l; }", layer)
                     await page.screenshot(path=str(out / layer / f"{i:05d}.png"), type="png", omit_background=True)
                 done[0] += 1
@@ -190,7 +286,7 @@ async def frames_layered(p, out, fps, workers=4, start=None, end=None):
             await browser.close()
 
         await asyncio.gather(*(worker(k, b, pg) for k, (b, pg) in enumerate(pages)))
-    return dur, f0, f1, moves
+    return dur, f0, f1, moves, backdrops
 
 
 def _ease(x):
@@ -198,7 +294,7 @@ def _ease(x):
     return "(" + c + "*" + c + "*(3-2*" + c + "))"          # smoothstep
 
 
-def composite(p, matte, out, silent, fps, f0, f1, crf, moves=()):
+def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
     """presenter (graded) -> [blurred backdrop while shrunk] -> back graphics -> person (matte) -> front graphics.
     moves: 'anchor' = the cut-out person shrinks to a corner (graphics fill the space behind them);
            'punch'  = a quick camera zoom-in on the footage."""
@@ -230,18 +326,21 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=()):
     ovp = ("overlay=x='(main_w-overlay_w)/2+%s':y='main_h-overlay_h':format=auto" % DX) if anchors else "overlay=format=auto"
     # backdrop intervals: union of the anchor moves (adjacent ones share one fade)
     spans = []
+    def _has_bd(a_, b_):  # a generated backdrop already fills this stretch: no blurred room needed
+        return any((x.get("t") or 0) <= a_ + 0.01 and (x.get("end") if x.get("end") is not None else 1e9) >= b_ - 0.01 for x in backdrops)
     for m in anchors:
         if spans and m["t"] <= spans[-1][1] - D + 0.01:
             spans[-1][1] = max(spans[-1][1], m["end"])
         else:
             spans.append([m["t"], m["end"]])
+    spans = [sp for sp in spans if not _has_bd(sp[0], sp[1])]
     pad = "tpad=stop_mode=clone:stop_duration=60"  # footage shorter than the voiceover holds its last frame
     fc = ["[0:v]fps=%s,%s,eq=contrast=1.04:saturation=1.06,format=rgb24,split=%d[va][vb]%s" % (fps, pad, 3 if spans else 2, "[vc]" if spans else ""),
           "[1:v]fps=%s,%s,format=gray[mv]" % (fps, pad),
           "[vb][mv]alphamerge[pm]",
           "[va]%s[vz]" % zoom,
           "[pm]%s,%s[pz]" % (zoom, pscale),
-          "[vz][4:v]overlay=format=auto[g0]"]
+          ("[vz][5:v]overlay=format=auto[vbd];[vbd][4:v]overlay=format=auto[g0]" if backdrops else "[vz][4:v]overlay=format=auto[g0]")]
     cur = "g0"
     if spans:
         n = len(spans)
@@ -262,14 +361,17 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=()):
            "-ss", "%.3f" % start, "-i", str(matte),
            "-framerate", str(fps), "-start_number", str(f0), "-i", str(out / "back" / "%05d.png"),
            "-framerate", str(fps), "-start_number", str(f0), "-i", str(out / "front" / "%05d.png"),
-           "-framerate", str(fps), "-loop", "1", "-i", str(out / "grad.png"),
-           "-filter_complex", ";".join(fc), "-map", "[v]", "-frames:v", str(f1 - f0),
+           "-framerate", str(fps), "-loop", "1", "-i", str(out / "grad.png")]
+    if backdrops:
+        cmd += ["-framerate", str(fps), "-start_number", str(f0), "-i", str(out / "bd" / "%05d.png")]
+    cmd += ["-filter_complex", ";".join(fc), "-map", "[v]", "-frames:v", str(f1 - f0),
            "-c:v", "libx264", "-preset", "slow", "-crf", str(crf), "-pix_fmt", "yuv420p", "-profile:v", "high", str(silent)]
     subprocess.run(cmd, check=True)
 
 
 def cmd_render(a):
     p = proj(a.project)
+    warn_config(p)
     out = ROOT / "frames" / f"short-{p.name}"
     if out.exists():
         shutil.rmtree(out)
@@ -278,8 +380,8 @@ def cmd_render(a):
     matte = next(iter(sorted(p.glob("*matte*.mkv"))), None)
     if any(p.glob("presenter.*")) and matte:
         # presenter + cutout: graphics behind the person, the person, graphics in front
-        dur, f0, f1, moves = asyncio.run(frames_layered(p, out, a.fps, a.workers, a.start, a.end))
-        composite(p, matte, out, silent, a.fps, f0, f1, a.crf, moves)
+        dur, f0, f1, moves, backdrops = asyncio.run(frames_layered(p, out, a.fps, a.workers, a.start, a.end))
+        composite(p, matte, out, silent, a.fps, f0, f1, a.crf, moves, backdrops)
         if a.start is not None or a.end is not None:
             test = p / "output" / f"{p.name}-test.mp4"
             test.parent.mkdir(exist_ok=True)
@@ -453,11 +555,15 @@ def main():
     c.add_argument("--name", help="shot name (default: from the URL)")
     c.add_argument("--height", type=int, default=1100, help="CSS px to capture when --find is not given")
     c.add_argument("--width", type=int, default=430, help="phone width in CSS px")
+    cf = sub.add_parser("config"); cf.add_argument("project")
+    cf.add_argument("--interactive", action="store_true", help="ask the setup questions")
+    cf.add_argument("--set", action="append", metavar="KEY=VALUE", help="set one answer (repeatable)")
+    cf.add_argument("--redo", action="store_true", help="ask every question again, even answered ones")
     fr = sub.add_parser("frames"); fr.add_argument("project"); fr.add_argument("video")
     fr.add_argument("--every", type=float, default=1.0, help="seconds between reference frames (default 1)")
     a = ap.parse_args()
     {"new": cmd_new, "segments": cmd_segments, "sheet": cmd_sheet, "render": cmd_render,
-     "capture": cmd_capture, "frames": cmd_frames}[a.cmd](a)
+     "capture": cmd_capture, "frames": cmd_frames, "config": cmd_config}[a.cmd](a)
 
 
 main()

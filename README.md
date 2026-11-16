@@ -19,6 +19,15 @@ python -m playwright install chromium
 
 You also need `ffmpeg` and `ffprobe` on your PATH. Microsoft Edge or Google Chrome is used (via Playwright) for the presenter modes because the bundled Chromium cannot decode H.264.
 
+## Setup comes first
+Every new project asks its setup questions before anything else (voice language, caption language, voice source, person on camera, look, backdrop mode and **which tool makes the backdrops: Kling, ElevenLabs, Higgsfield, Bloom or your own files**, spend limit, length, music, logo, sources, privacy). Answers are saved in `projects/<name>/config.json`.
+```
+python tools/shorts.py new my-topic --voice voice.mp3      # asks the questions in a terminal
+python tools/shorts.py config my-topic --interactive       # ask (or ask the rest) later
+python tools/shorts.py config my-topic --set backdrop_tool=kling --set backdrop_budget="100 Kling credits"
+```
+The `shorts-director` agent reads `config.json` first, asks you anything still unanswered in the chat, and never spends beyond the limit you set.
+
 ## Quick start
 
 ```
@@ -38,6 +47,22 @@ Add your own `logo.png` to the project folder and set `logo: 'logo.png'` in `scr
 3. Render as usual. Hooks and numbers sit behind the person, cards sit low so the face stays clear. Add `moves` in `script.js` for the shrink and the punch-ins.
 
 `tools/matte.py` needs the Robust Video Matting model, which is not included. Download `rvm_mobilenetv3_fp32.onnx` from the project's releases (https://github.com/PeterL1n/RobustVideoMatting/releases) and put it in `tools/models/`. Check that project's licence before redistributing the weights.
+
+## Backdrops: images and videos behind the scenes
+```js
+backdrops: [
+  { src: 'media/airport.png', t: 0,     end: 10.8, focus: [15, 85], zoom: [1, 1.08], dim: 0.42 },  // focus = slow sideways drift (wide images)
+  { src: 'media/city.mp4',    t: 10.35, end: 22.1, dim: 0.40 },                                      // videos loop to fill the slot
+]
+```
+Neighbouring backdrops crossfade (start the next 0.45 s early). Text switches to white automatically while a backdrop is on screen. With a presenter and a cut-out (`tools/matte.py`) the backdrop replaces the room behind the person. Generate the media with any image or video tool you have, then save it in `projects/<name>/media/`.
+
+## Framed photos
+```js
+{ t: 4.46, end: 8.0, type: 'photo', src: 'media/airport.png', caption: 'Waiting…', tilt: -4 }                         // polaroid with tape
+{ t: 12, end: 18, type: 'photo', style: 'card', items: [{ src: 'media/a.png' }, { src: 'media/b.png' }] }              // 2-3 photo collage
+```
+Photos and short video clips drop in with a tilt and float gently. For the most professional look, put the same picture behind it as a **blurred backdrop** (`blur: 14`), so the framed photo sits on its own colours.
 
 ## Notes
 

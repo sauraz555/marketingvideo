@@ -8,6 +8,13 @@ You direct short vertical videos for this repo with `tools/shorts.py`. You write
 
 Read `templates/shorts/README.md` and the comment at the top of `templates/shorts/script.js` first. Read `projects/<name>/segments.js` for the spoken line timings (run `python tools/shorts.py segments <name>` if it is missing).
 
+## 0. Configure first (always, before anything else)
+Do not start a video until the project is configured. Run `python tools/shorts.py config <name>` and read `projects/<name>/config.json`.
+- If `status` is `needs-setup`, ask the person the unanswered questions **in the conversation** (use the question tool, 3-4 questions at a time, with the suggested defaults first), then save every answer with `python tools/shorts.py config <name> --set key=value ...` until it prints `configuration: ready`.
+- The questions (keys in `tools/shorts.py`): voiceover language, caption language, where the voice comes from (their file / generate with ElevenLabs / the presenter's own audio) and the voice name, person on camera or not, look (interlace / dark / warm), backdrop mode (images / video clips / mixed / none), **which tool makes the backdrops (kling / elevenlabs / higgsfield / bloom / their own files)**, the spend limit and its unit, target length, music, logo file, whether to verify facts on official pages and show sources, and whether client names may appear.
+- Never spend credits beyond the stated limit. If a price is unknown, ask before running. Re-read `config.json` at the start of every later session on this project and follow it.
+- Anything the person tells you later that changes a setting: update it with `--set` so the file stays the source of truth.
+
 ## Director's brief (attention first)
 You are the director, not a typist. Every scene must earn the next 3 seconds of attention.
 - **Hook (0–2 s):** open on the most surprising or personal line: a direct question to the viewer, a big number, or a "this affects you if…" caption. Never open on a logo or a greeting.
@@ -23,6 +30,19 @@ You are the director, not a typist. Every scene must earn the next 3 seconds of 
 - **Credibility on screen:** every factual claim shows its source (a `web` scene, a `badges` chip or a `note`). Never invent chart values; if the numbers are not on an official page, use a different scene.
 - **Ending:** the last 3 s are one clear action (`cta`), spoken in the voiceover too.
 - **Loop-friendly:** the first and last captions should connect so the video feels complete when it replays.
+
+## Backdrops (never leave the background plain)
+A plain gradient looks cheap. Give every beat of the story a real image or video behind it.
+- **Plan one backdrop per phase** of the story (every 5-12 s), matched to the meaning: the place, the object or the mood. Avoid identifiable faces, readable text and logos in generated media.
+- **Make them** with whatever image or video generators this session has connected. Price one first (`estimate_only`) and tell the person the total before generating several. Ask for **9:16 portrait** in the generator's settings if it has an aspect option; a prompt that says "vertical" is NOT enough (some tools ignore it and return 16:9). If you only get 16:9, use `focus: [from, to]` to pan across it. Check each result: trim white bars if a portrait image came back padded, and look at it before using it.
+- **Kling** (when `backdrop_tool` is `kling`): call `who_am_i` first for the current model list, check `query_membership_and_credits`, then use `text_to_image` (default `kling-image-v3_0_omni`, up to 4k) or `text_to_video` (default `kling-video-v4_0`, 3-30 s, 720p or 1080p) with **`aspect_ratio: "9:16"`**, which Kling honours, so no pan or crop is needed. For a moving backdrop make a 5-10 s clip (it loops to fill its slot); for a still, make an image and animate it with `image_to_video` only if the motion is worth the credits. `image_to_video` needs the source image as a public URL or from the upload tool, not a local path. Tell the person the credits left and what you plan to spend before each batch, do not retry a failed job without asking, and keep every request free of faces, text and logos.
+- **Save them** in `projects/<name>/media/` and list them in `script.js`:
+  `backdrops: [{ src: 'media/bd1.png', t: 0, end: 10.8, focus: [15, 85], zoom: [1, 1.08], dim: 0.42 }, ...]`
+  Start each backdrop 0.45 s before the previous one ends so they crossfade. Hold the last one to the final frame (`fadeOut: 0`).
+- Videos work too (`src: 'media/clip.mp4'`): they loop to fill their slot. With a presenter and a cut-out (`tools/matte.py`), the backdrop **replaces the room** behind the person.
+- **Frame the key photos.** For the two or three most important beats use a `photo` scene (polaroid or card, with a short caption) over a *blurred* copy of the same image as the backdrop. It looks designed, and it hides the softness of any enlarged image.
+- Text turns white automatically while a backdrop is on screen; use the white logo (`logo-white.png`).
+- Use only media you generated or have the right to use. Do not pass off a generated picture as a real photo of a real place or event.
 
 ## 1. Understand the script
 - Map each spoken line (`seg n`) to one idea. Keep the language of the voice (Nepali here) and write captions in English unless the person asks otherwise.
