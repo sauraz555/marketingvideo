@@ -1,0 +1,22 @@
+# projects hold footage, voices, client material and rendered videos: never committed
+projects/
+frames/
+
+# media and model weights
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.onnx
+tools/models/
+
+# secrets
+.env
+*.key
+
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
