@@ -450,8 +450,66 @@ body[data-layer="bd"] #vis, body[data-layer="bd"] #caps, body[data-layer="bd"] #
 .rules .rr span{font-weight:500;font-size:44px;letter-spacing:-.02em;line-height:1.15}
 .rules .silk{position:absolute;right:-260px;bottom:-120px;width:900px;height:900px;border-radius:50%;background:conic-gradient(from 200deg,transparent,var(--cr) 18%,#300 30%,transparent 42%,color-mix(in srgb,var(--cr) 70%,#fff) 55%,transparent 64%);filter:blur(40px);opacity:.9}
 .callout .cp{position:absolute;padding:20px 44px;border-radius:999px;background:linear-gradient(180deg,color-mix(in srgb,var(--cr) 85%,#fff),var(--cr));border:2px solid rgba(255,255,255,.5);font-weight:600;font-size:52px;letter-spacing:-.02em;white-space:nowrap;box-shadow:0 0 34px color-mix(in srgb,var(--cr) 60%,transparent);transform:translate(-50%,-50%)}
-.callout svg{position:absolute;left:0;top:0;width:1080px;height:1920px;overflow:visible}
+.callout svg{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
 .callout path{fill:none;stroke:#fff;stroke-width:4;stroke-linecap:round}
+
+/* map */
+.map{overflow:hidden}
+.map .mw{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:50% 50%}
+.map .dots{position:absolute;inset:-40%;background:radial-gradient(circle,color-mix(in srgb,var(--capink) 22%,transparent) 2.2px,transparent 2.8px) 0 0/30px 30px;-webkit-mask-image:radial-gradient(70% 55% at 50% 48%,#000 40%,transparent 80%);mask-image:radial-gradient(70% 55% at 50% 48%,#000 40%,transparent 80%)}
+.map .mimg{position:absolute;object-fit:cover;opacity:.85;border-radius:18px}
+.map svg.gr{position:absolute;left:0;top:0;overflow:visible}
+.map svg line{stroke:color-mix(in srgb,var(--capink) 16%,transparent);stroke-width:2}
+.map .rt{fill:none;stroke:var(--accent);stroke-width:6;stroke-linecap:round;filter:drop-shadow(0 0 10px var(--accent))}
+.map .pin{position:absolute;width:0;height:0}
+.map .pin i,.map .pin b{position:absolute;left:-17px;top:-17px;width:34px;height:34px;border-radius:50%}
+.map .pin i{background:var(--accent);border:6px solid #fff;box-shadow:0 0 26px var(--accent)}
+.map .pin b{border:4px solid var(--accent)}
+.map .pin span{position:absolute;left:34px;top:-30px;white-space:nowrap;padding:10px 26px;border-radius:999px;background:rgba(10,10,14,.78);border:2px solid rgba(255,255,255,.35);font-weight:600;font-size:40px;letter-spacing:-.01em;color:#fff}
+.map .pin span.l{left:auto;right:34px}
+.map .pin span.b{left:0;top:34px;transform:translateX(-50%)} .map .pin span.a{left:0;top:-100px;transform:translateX(-50%)}
+.map .mt{position:absolute;left:0;right:0;top:calc(var(--safe-top) + 40px);text-align:center;font-weight:700;font-size:76px;letter-spacing:-.03em;color:var(--capink);text-shadow:var(--capshadow)}
+/* the person stepped aside (anchor): the crimson graphics keep clear of the corner */
+[data-presenter="1"] .anchor.pillar{align-items:flex-start;padding-top:calc(var(--safe-top) + 60px)}
+[data-presenter="1"] .anchor.rules .rp{padding-top:calc(var(--safe-top) + 40px)}
+[data-presenter="1"] .anchor.lanes .num{font-size:340px;top:1060px}
+
+/* ===== landscape frame (SCRIPT.frame = 'landscape', 1920x1080): native layouts for the main scenes; the rest sit on a portrait board in a side panel ===== */
+#stage[data-frame="landscape"]{ --safe-top:60px; --safe-bottom:80px; --safe-left:96px; --safe-right:96px; }
+#stage[data-frame="landscape"] #guides .gr{top:0}
+.pboard{position:absolute;left:50%;top:0;width:1080px;height:1920px;margin-left:-540px;transform:scale(.5625);transform-origin:50% 0;--safe-top:120px;--safe-bottom:160px;--safe-left:60px;--safe-right:60px}
+.pboard.side{left:96px;margin-left:0;transform-origin:0 0}
+#stage[data-frame="landscape"] .pboard .list{top:420px;transform:none} #stage[data-frame="landscape"] .pboard .compare{top:520px;transform:none}
+#stage[data-frame="landscape"] .pboard .compare.stack{top:420px;transform:none} #stage[data-frame="landscape"] .pboard .pills{top:640px}
+#stage[data-frame="landscape"] .pboard .dds{top:300px;transform:none} #stage[data-frame="landscape"] .pboard .chart{top:330px;transform:none}
+#stage[data-frame="landscape"] .pboard .doc{top:220px;transform:none} #stage[data-frame="landscape"] .pboard .pring{top:420px;transform:none}
+#stage[data-frame="landscape"] .pboard .line{top:330px;transform:none} #stage[data-frame="landscape"] .pboard .tline{top:330px;transform:none}
+#stage[data-frame="landscape"] .pboard .photo{top:300px;transform:none} #stage[data-frame="landscape"] .pboard .web{top:180px}
+#stage[data-frame="landscape"] .pboard .web .vp{height:1060px} #stage[data-frame="landscape"] .pboard .badges{top:560px}
+#stage[data-frame="landscape"] .cap,#stage[data-frame="landscape"] .cap.low,#stage[data-frame="landscape"] .cap.plow{top:auto;bottom:150px}
+#stage[data-frame="landscape"] .cap.top,#stage[data-frame="landscape"] .cap.ptop{top:80px;bottom:auto}
+#stage[data-frame="landscape"] .cap.mid{top:420px;bottom:auto}
+#stage[data-frame="landscape"] #subs{top:auto;bottom:70px}
+#stage[data-frame="landscape"] .kin{padding:0 140px}
+#stage[data-frame="landscape"] .kin.top{padding-top:110px} #stage[data-frame="landscape"] .kin.low{padding-bottom:190px}
+#stage[data-frame="landscape"] .bignum{top:110px} #stage[data-frame="landscape"] .bignum .num{font-size:260px;line-height:1.05}
+#stage[data-frame="landscape"] .stat{top:250px} #stage[data-frame="landscape"] .stat .box{width:900px}
+#stage[data-frame="landscape"] .quote{top:150px;padding:0 380px}
+#stage[data-frame="landscape"] .cta{top:280px;transform:none}
+#stage[data-frame="landscape"] .hero{top:240px} #stage[data-frame="landscape"] .hero .e{font-size:300px}
+#stage[data-frame="landscape"] .stamp{top:330px}
+#stage[data-frame="landscape"] .glass .gc{width:760px}
+#stage[data-frame="landscape"] .pillar .pc{min-height:0;width:960px}
+#stage[data-frame="landscape"] .diamonds .dl{top:140px;left:160px} #stage[data-frame="landscape"] .diamonds .dr{margin-bottom:30px}
+#stage[data-frame="landscape"] .diamonds .pip{bottom:80px;right:96px}
+#stage[data-frame="landscape"] .lanes .ls{top:190px} #stage[data-frame="landscape"] .lanes .num{top:500px;font-size:380px}
+#stage[data-frame="landscape"] .lanes .num.rf{top:895px} #stage[data-frame="landscape"] .lanes .floor{top:890px} #stage[data-frame="landscape"] .lanes .ln::after{top:876px}
+#stage[data-frame="landscape"] .rules .rp{padding:100px 96px 0 160px} #stage[data-frame="landscape"] .rules .rt{font-size:120px}
+#stage[data-frame="landscape"] .rules .rs{margin:10px 0 34px} #stage[data-frame="landscape"] .rules .rr{width:900px;margin-bottom:18px;padding:18px 36px}
+#stage[data-frame="landscape"] .map .mt{top:50px}
+/* the person stepped aside into the lower-right card: graphics move left */
+#stage[data-frame="landscape"] .anchor.pillar,#stage[data-frame="landscape"] .anchor.glass{justify-content:flex-start;align-items:center;padding:0 0 0 140px}
+#stage[data-frame="landscape"] .anchor.stat,#stage[data-frame="landscape"] .anchor.quote,#stage[data-frame="landscape"] .anchor.cta{right:auto;width:1150px;padding-left:120px}
 
 /* ===== style pack B: creator explainer (mind map on paper, sticky notes, oval tags, small pill captions) ===== */
 .mindmap{overflow:hidden}
@@ -536,8 +594,8 @@ body[data-layer="back"] #subs, body[data-layer="bd"] #subs{display:none!importan
   <div id="stage">
     <div id="bg"><div class="blob" id="b1"></div><div class="blob" id="b2"></div></div>
     <div id="splitbg"></div>
-    <div id="pwrap"><video id="pvideo" muted playsinline preload="auto"></video><div id="pshade"></div></div>
     <div id="bds"></div>
+    <div id="pwrap"><video id="pvideo" muted playsinline preload="auto"></video><div id="pshade"></div></div>
     <div id="grain"></div>
     <div class="layer" id="vis"></div>
     <div class="layer" id="caps"></div>
@@ -557,11 +615,19 @@ body[data-layer="back"] #subs, body[data-layer="bd"] #subs{display:none!importan
 <script src="script.js"></script>
 <script>
 const S = window.SCRIPT, SEG = window.SEGMENTS, WORDS = window.WORDS || [];
+const STAGE_W = S.frame === 'landscape' ? 1920 : 1080, STAGE_H = S.frame === 'landscape' ? 1080 : 1920;   // SCRIPT.frame: 'portrait' (default) | 'landscape'
+window.STAGE_W = STAGE_W; window.STAGE_H = STAGE_H;   // read by tools/shorts.py lint
+window.HAS_CUTOUT = /[?&]cutout=1/.test(location.search);   // set by tools/shorts.py when it composites the cut-out itself
 window.PAGE_ERRORS = []; window.addEventListener('error', e => { if (e.message) window.PAGE_ERRORS.push(String(e.message)); });   // script errors (files that fail to load are reported by the tools)
 const stage = document.getElementById('stage'), vis = document.getElementById('vis'), caps = document.getElementById('caps');
 // ---- look and brand: SCRIPT.look = 'clean' | 'dark' | 'warm' | 'interlace' | 'brand'. With brand.js present and no look given, the brand is used.
 const BRAND = window.BRAND || null;
 stage.dataset.look = S.look || (BRAND ? 'brand' : 'clean');
+const LANDSCAPE = S.frame === 'landscape';
+stage.dataset.frame = LANDSCAPE ? 'landscape' : 'portrait'; stage.style.width = STAGE_W + 'px'; stage.style.height = STAGE_H + 'px';
+{ const vp = document.getElementById('viewport'); vp.style.aspectRatio = STAGE_W + '/' + STAGE_H; if (LANDSCAPE) vp.style.width = 'min(760px,96vw)'; }
+// scenes with a landscape layout of their own; any other scene is drawn on a portrait board in a side panel
+const LAND_NATIVE = new Set(['cap','title','kinetic','bignum','callout','broll','map','pillar','diamonds','lanes','rules','glass','stamp','hero','cta','quote','stat']);
 (function theme(){
   const hex = c => { c = String(c).trim().replace('#',''); if (c.length === 3) c = c.replace(/./g, x => x + x); return [0,2,4].map(i => parseInt(c.slice(i, i+2), 16)); };
   const mix = (a, b, k) => '#' + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * k).toString(16).padStart(2,'0')).join('');
@@ -882,7 +948,7 @@ const B = {
   },
   orb(sc){
     // a glowing orb in the brand colour: at:[x,y] start, to:[x,y] drift target, size (scale); label: 'Instant *replies*'; chip: '24/7' (chipAt seconds)
-    const a = sc.at || [540, 900], b = sc.to || a;
+    const a = sc.at || [STAGE_W/2, STAGE_H*.47], b = sc.to || a;
     const el = h(`<div class="abs full orb">${sc.label?`<div class="lb">${rich(sc.label)}</div><div class="rule"></div>`:''}<div class="o" style="left:${a[0]}px;top:${a[1]}px"><div class="rg"></div><div class="rg"></div><div class="core"></div></div>${sc.chip?`<div class="chip">${esc(sc.chip)}</div>`:''}</div>`);
     return { el, inn(tl,t,end){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
       const o = el.querySelector('.o'), rings = el.querySelectorAll('.rg'), life = Math.max(.6, end - t);
@@ -916,7 +982,7 @@ const B = {
       tl.fromTo(el.querySelector('.streak'),{x:0,autoAlpha:1},{x:1500,autoAlpha:0,duration:.9,ease:'power2.inOut'},t+.15);
       el.querySelectorAll('.it').forEach((r,i) => { const ti = t + ((sc.at||[])[i] ?? (.9 + i*(sc.gap ?? .7)));
         tl.fromTo(r.querySelector('b'),{autoAlpha:0,filter:'blur(12px)',x:-20},{autoAlpha:1,filter:'blur(0px)',x:0,duration:.35,ease:'power3.out'},ti);
-        const s = r.querySelector('span'); if (s) tl.fromTo(s,{autoAlpha:0,y:10},{autoAlpha:.78,y:0,duration:.3},ti + (sc.subAt ?? .35)); });
+        const s = r.querySelector('span'); if (s) tl.fromTo(s,{autoAlpha:0,y:10},{autoAlpha:.78,y:0,duration:.3},(sc.subAts||[])[i] != null ? t + sc.subAts[i] : ti + (sc.subAt ?? .35)); });
       tl.fromTo(el.querySelector('.pc'),{scale:1},{scale:1.04,duration:6,ease:'none'},t+.5);
     }, out(tl,t){ tl.to(el,{autoAlpha:0,filter:'blur(14px)',duration:.28},t-.28); } };
   },
@@ -930,7 +996,7 @@ const B = {
       el.querySelectorAll('.dr').forEach((r,i) => { const ti = t + ((sc.at||[])[i] ?? (i*(sc.gap ?? .35)));
         tl.fromTo(r.querySelector('.dm'),{autoAlpha:0,scale:.3,rotation:-90},{autoAlpha:1,scale:1,rotation:0,duration:.45,ease:'back.out(1.8)'},ti);
         tl.fromTo(r.querySelector('.dt b'),{autoAlpha:0,x:-30,filter:'blur(10px)'},{autoAlpha:1,x:0,filter:'blur(0px)',duration:.35,ease:'power3.out'},ti+.12);
-        const s = r.querySelector('.dt span'); if (s) tl.fromTo(s,{autoAlpha:0,y:10},{autoAlpha:.85,y:0,duration:.3},ti + (sc.subAt ?? .45)); });
+        const s = r.querySelector('.dt span'); if (s) tl.fromTo(s,{autoAlpha:0,y:10},{autoAlpha:.85,y:0,duration:.3},(sc.subAts||[])[i] != null ? t + sc.subAts[i] : ti + (sc.subAt ?? .45)); });
       tl.fromTo(el.querySelectorAll('.pip'),{autoAlpha:0,y:80,scale:.85},{autoAlpha:1,y:0,scale:1,duration:.5,ease:'power3.out'},t+.2);
     }, out(tl,t){ tl.to(el,{autoAlpha:0,duration:.25},t-.25); } };
   },
@@ -944,7 +1010,7 @@ const B = {
       tl.fromTo(el.querySelector('.floor'),{scaleX:0,transformOrigin:'0 50%'},{scaleX:1,duration:.6,ease:'power2.out'},t);
       its.forEach((x,i) => tl.set([ls[i], nums[i], rfs[i]],{autoAlpha: x0 + (i+1)*W <= 940 ? .18 : 0},t));   // only lanes already in the frame show faintly
       its.forEach((x,i) => { const ti = t + ((sc.at||[])[i] ?? (.3 + i*(sc.gap ?? 1.4)));
-        const cx = Math.min(0, 540 - (x0 + i*W + W/2));   // keep lane i in the middle of the frame
+        const cx = Math.min(0, STAGE_W/2 - (x0 + i*W + W/2));   // keep lane i in the middle of the frame
         tl.to(world,{x:cx,duration:.7,ease:'power3.inOut'},ti);
         if (i) tl.to([ls[i-1], nums[i-1], rfs[i-1]],{autoAlpha: x0 + (i-1)*W + cx >= 0 ? .35 : 0,duration:.3},ti);   // the lane just left stays faint while it is still whole on screen
         if (i > 1) tl.to([ls[i-2], nums[i-2], rfs[i-2]],{autoAlpha:0,duration:.3},ti);   // lanes that left the frame
@@ -973,6 +1039,50 @@ const B = {
       tl.fromTo(el.querySelector('.cp'),{autoAlpha:0,scale:.6,filter:'blur(10px)'},{autoAlpha:1,scale:1,filter:'blur(0px)',duration:.35,ease:'back.out(2)'},t);
       tl.fromTo(p,{strokeDashoffset:L},{strokeDashoffset:0,duration:.5,ease:'power2.out'},t+.2);
     }, out(tl,t){ tl.to(el,{autoAlpha:0,duration:.22},t-.22); } };
+  },
+  // ---------- map: places named in the script, pinned where they really are ----------
+  map(sc){
+    // pins:[{ label, lat, lon, at }] (or x, y in frame px); route:true draws the journey pin to pin; title; img + bounds:[north, west, south, east] = a map picture under the pins
+    const P = sc.pins || [], geo = P.length && P.every(q => q.lat != null), pr = q => geo ? [q.lon, -q.lat] : [q.x, q.y];
+    let pts = P.map(pr), x0 = Math.min(...pts.map(q=>q[0])), x1 = Math.max(...pts.map(q=>q[0])), y0 = Math.min(...pts.map(q=>q[1])), y1 = Math.max(...pts.map(q=>q[1]));
+    if (geo) { const cx = (x0+x1)/2, cy = (y0+y1)/2, sx = Math.max(26, (x1-x0)*1.6), sy = Math.max(18, (y1-y0)*1.6); x0 = cx-sx/2; x1 = cx+sx/2; y0 = cy-sy/2; y1 = cy+sy/2; }
+    const R = sc.region || [110, STAGE_H*.24, STAGE_W-110, STAGE_H*.72];
+    const k = geo ? Math.min((R[2]-R[0])/(x1-x0), (R[3]-R[1])/(y1-y0)) : 1, ox = geo ? (R[0]+R[2])/2 - (x0+x1)/2*k : 0, oy = geo ? (R[1]+R[3])/2 - (y0+y1)/2*k : 0;
+    const XY = q => { const v = pr(q); return geo ? [v[0]*k+ox, v[1]*k+oy] : v; };
+    const XYg = (lon, lat) => [lon*k+ox, -lat*k+oy];
+    let grid = '';
+    if (geo) { for (let lo = Math.floor((x0-60)/10)*10; lo <= x1+60; lo += 10) { const a = XYg(lo, 85), b = XYg(lo, -85); grid += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`; }
+               for (let la = -80; la <= 80; la += 10) { const a = XYg(x0-200, la), b = XYg(x1+200, la); grid += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`; } }
+    const XYs = P.map(XY);
+    // label side per pin: right, left, below, above, whichever does not hit a label already placed (close cities stay readable)
+    const boxes = [], side = P.map((q, i) => { const [x, y] = XYs[i], w = String(q.label || '').length * 23 + 70, hgt = 66;
+      const opts = (x > STAGE_W * .6 ? ['l', 'r'] : ['r', 'l']).concat(['b', 'a']);
+      const rect = o => o === 'r' ? [x + 34, y - 33, w, hgt] : o === 'l' ? [x - 34 - w, y - 33, w, hgt] : o === 'b' ? [x - w/2, y + 34, w, hgt] : [x - w/2, y - 34 - hgt, w, hgt];
+      const hit = r => boxes.some(b => r[0] < b[0] + b[2] + 10 && b[0] < r[0] + r[2] + 10 && r[1] < b[1] + b[3] + 8 && b[1] < r[1] + r[3] + 8);
+      const o = opts.find(o => !hit(rect(o))) || opts[i % opts.length]; boxes.push(rect(o)); return o; });
+    let route = '';
+    if (sc.route && XYs.length > 1) route = XYs.slice(1).map((q,i) => { const a = XYs[i], mx = (a[0]+q[0])/2, my = Math.min(a[1], q[1]) - Math.max(60, Math.hypot(q[0]-a[0], q[1]-a[1])*.25); return `<path class="rt" d="M${a[0]},${a[1]} Q${mx},${my} ${q[0]},${q[1]}"/>`; }).join('');
+    let img = '';
+    if (sc.img && sc.bounds && geo) { const a = XYg(sc.bounds[1], sc.bounds[0]), b = XYg(sc.bounds[3], sc.bounds[2]); img = `<img class="mimg" src="${esc(sc.img)}" style="left:${a[0]}px;top:${a[1]}px;width:${b[0]-a[0]}px;height:${b[1]-a[1]}px">`; }
+    else if (sc.img) img = `<img class="mimg" src="${esc(sc.img)}" style="left:0;top:0;width:${STAGE_W}px;height:${STAGE_H}px">`;
+    const el = h(`<div class="abs full map cx">${sc.title?`<div class="mt">${rich(sc.title)}</div>`:''}<div class="mw">${img}<div class="dots"></div><svg class="gr" width="${STAGE_W}" height="${STAGE_H}">${grid}${route}</svg>${P.map((q,i)=>`<div class="pin" style="left:${XYs[i][0]}px;top:${XYs[i][1]}px"><i></i><b></b>${q.label?`<span class="${side[i]}">${esc(q.label)}</span>`:''}</div>`).join('')}</div></div>`);
+    return { el, inn(tl,t,end){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.3},t);
+      const mw = el.querySelector('.mw'), pins = el.querySelectorAll('.pin'), rts = el.querySelectorAll('.rt'), life = Math.max(.8, end - t);
+      tl.fromTo(el.querySelectorAll('.mt'),{autoAlpha:0,y:-20},{autoAlpha:1,y:0,duration:.35},t+.1);
+      tl.fromTo(el.querySelector('.gr'),{autoAlpha:0},{autoAlpha:1,duration:.5},t);
+      tl.fromTo(mw,{scale:1.18,x:0,y:0},{scale:1,duration:.8,ease:'power3.out'},t);
+      rts.forEach(r => { r.style.strokeDasharray = '14 12'; });
+      const follow = P.length > 1 && sc.follow !== false;
+      P.forEach((q,i) => { const ti = t + (q.at ?? (.5 + i*.7));
+        tl.fromTo(pins[i].querySelector('i'),{scale:0},{scale:1,duration:.35,ease:'back.out(2.4)'},ti);
+        tl.fromTo(pins[i].querySelector('b'),{scale:.4,autoAlpha:.9},{scale:2.6,autoAlpha:0,duration:1.1,ease:'power1.out',repeat:Math.max(0,Math.floor((end-ti)/1.1)-1)},ti);
+        tl.fromTo(pins[i].querySelectorAll('span'),{autoAlpha:0,y:12},{autoAlpha:1,y:0,duration:.3},ti+.15);
+        if (i && rts[i-1]) tl.fromTo(rts[i-1],{clipPath:'inset(0 100% 0 0)'},{clipPath:'inset(0 0% 0 0)',duration:.6,ease:'power2.inOut'},ti-.45);
+        if (follow) { const [px, py] = XYs[i], z = 1.2;
+          tl.to(mw,{scale:z,x:(STAGE_W/2 - px)*.45,y:(STAGE_H*.48 - py)*.45,duration:.7,ease:'power2.inOut'},ti-.2); } });
+      if (follow) tl.to(mw,{scale:1,x:0,y:0,duration:.8,ease:'power2.inOut'},Math.max(t + (P[P.length-1].at ?? P.length*.7) + 1.1, t+.9));
+      else tl.to(mw,{scale:1.08,duration:life,ease:'none'},t+.8);
+    }, out(tl,t){ tl.to(el,{autoAlpha:0,duration:.3},t-.3); } };
   },
   // ---------- style pack C: split explainer (use with split:true so the presenter sits in a card below) ----------
   orbit(sc){
@@ -1067,7 +1177,7 @@ const B = {
     const el = h(`<div class="abs full mindmap ${sc.paper === false ? '' : 'bd-style paper'}" style="${sc.color?`--mm:${esc(sc.color)}`:''}"><div class="world"><svg>${N.filter(n => n.parent && by[n.parent]).map(edge).join('')}</svg>${N.map(n=>`<div class="mm ${n.kind || 'oval'}" data-n="${esc(n.id)}" style="left:${n.x}px;top:${n.y}px;font-size:${sz(n)}px">${esc(n.text).replace(/\n/g,'<br>')}</div>`).join('')}</div></div>`);
     return { el, inn(tl,t,end){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.2},t);
       const world = el.querySelector('.world'), cams = sc.cam && sc.cam.length ? sc.cam : [{at: 0, x: N[0].x, y: N[0].y, zoom: 1}];
-      const pose = c => ({x: 540 - c.x * (c.zoom ?? 1), y: 900 - c.y * (c.zoom ?? 1), scale: c.zoom ?? 1});
+      const pose = c => ({x: STAGE_W/2 - c.x * (c.zoom ?? 1), y: STAGE_H*.47 - c.y * (c.zoom ?? 1), scale: c.zoom ?? 1});
       tl.set(world, pose(cams[0]), t);
       cams.slice(1).forEach((c,i) => tl.to(world,{...pose(c),duration:c.dur ?? Math.min(1.1, Math.max(.4, c.at - cams[i].at)),ease:'power2.inOut'},t + c.at));
       N.forEach((n,i) => { const at = t + (n.at ?? (.2 + i*.55)), node = el.querySelector(`.mm[data-n="${CSS.escape(n.id)}"]`), ed = el.querySelector(`.ed[data-n="${CSS.escape(n.id)}"]`);
@@ -1156,7 +1266,9 @@ for (const [lane, list] of Object.entries(lanes)) {
     const end = last && sc.end == null ? DUR : Math.min(endOf(sc) ?? next, next, DUR);
     b.el.dataset.scene = window.SCENE_INFO.length;
     window.SCENE_INFO.push({type: sc.type, lane, t: +t.toFixed(3), end: +end.toFixed(3), key: sc.key || '', lead: sc.lead || ''});
-    (lane === 'cap' ? caps : vis).appendChild(b.el);
+    // landscape: a scene without a landscape layout is drawn on a portrait board, scaled into a panel (beside the person when there is one)
+    const host = LANDSCAPE && lane !== 'cap' && !LAND_NATIVE.has(sc.type) ? vis.appendChild(h(`<div class="pboard ${S.presenter ? 'side' : ''}"></div>`)) : (lane === 'cap' ? caps : vis);
+    host.appendChild(b.el);
     gsap.set(b.el, {autoAlpha:0});
     const kk = (sc.type === 'cap' || sc.type === 'title') && b.el.querySelector('.key');   // long key words shrink so they stay on one line
     if (kk) { const n = (sc.key || '').length; kk.style.fontSize = (n <= 9 ? 112 : n <= 12 ? 96 : n <= 15 ? 80 : 66) + 'px'; }
@@ -1184,12 +1296,43 @@ for (const [lane, list] of Object.entries(lanes)) {
     if (spans.length && a - spans[spans.length-1][1] < .3) spans[spans.length-1][1] = Math.max(b, spans[spans.length-1][1]); else spans.push([a, b]); });
   window.SPLITS = spans; if (!spans.length) return;
   const bg = document.getElementById('splitbg'), R = S.splitCard || {left: 40, top: 1238, width: 1000, height: 610, radius: 46};
-  gsap.set(pw,{left:0,top:0,width:1080,height:1920,right:'auto',bottom:'auto',borderRadius:0});
+  gsap.set(pw,{left:0,top:0,width:STAGE_W,height:STAGE_H,right:'auto',bottom:'auto',borderRadius:0});
   spans.forEach(([a, b]) => { const hard = a < .05;
     TL.set(bg,{visibility:'visible'},a); TL.set(stage,{attr:{'data-split':'1','data-presenter':'0'}},a);
     TL.to(pw,{left:R.left,top:R.top,width:R.width,height:R.height,borderRadius:R.radius,duration:hard ? .001 : .32,ease:'power3.inOut'},a);
     if (b < DUR - .05){ TL.set(bg,{visibility:'hidden'},b); TL.set(stage,{attr:{'data-split':'0','data-presenter':S.presenter ? '1' : '0'}},b);
-      TL.to(pw,{left:0,top:0,width:1080,height:1920,borderRadius:0,duration:.28,ease:'power3.inOut'},b); } });
+      TL.to(pw,{left:0,top:0,width:STAGE_W,height:STAGE_H,borderRadius:0,duration:.28,ease:'power3.inOut'},b); } });
+})();
+
+// ---- camera moves on the footage, in the page (preview, and renders without a cut-out; with a cut-out tools/shorts.py repeats them in ffmpeg)
+//   { mode:'punch', t, amount:.12 }                         quick push-in on a word, settles back
+//   { mode:'zoom',  t, end, from:1, to:1.2, focus:[.5,.35], hold }   slow push-in (to > from) or pull-out (to < from), eases back after end unless hold
+//   { mode:'pan',   t, end, zoom:1.25, from:[.3,.4], to:[.7,.4] }    move across the footage while zoomed in
+//   { mode:'anchor', t, end, scale:.6, side:'right'|'left' }  the person shrinks to a corner; graphics get the space
+(function camera(){ if (!S.presenter || !MOVES.length) return;
+  // moved with layout (left/top/width/height), not CSS transforms: a transformed <video> can come out black in headless screenshots
+  // the camera state is z (zoom) and fx, fy (focus 0-1); each tween writes the video's box directly, so seeking renders it (no callbacks)
+  const cam = document.getElementById('pvideo'), P = {z: 1, fx: .5, fy: .4};
+  gsap.set(cam,{position:'absolute',left:'0%',top:'0%',width:'100%',height:'100%'});
+  const box = v => ({width:(v.z*100).toFixed(3)+'%', height:(v.z*100).toFixed(3)+'%', left:(-(v.z-1)*v.fx*100).toFixed(3)+'%', top:(-(v.z-1)*v.fy*100).toFixed(3)+'%'});
+  const go = (vals, dur, ease, at) => { Object.assign(P, vals); TL.to(cam,{...box(P),duration:dur,ease},at); };
+  const set = (vals, at) => { Object.assign(P, vals); TL.set(cam,box(P),at); };
+  if (MOVES.some(m => m.mode === 'anchor') && !window.HAS_CUTOUT) gsap.set(document.getElementById('bds'),{display:'block'});   // sits behind the footage; seen only round the shrunken card
+  [...MOVES].sort((a,b) => a.t - b.t).forEach(m => {
+    const end = m.end ?? (m.t + 1);
+    if (m.mode === 'punch') { const a = m.amount ?? .12;
+      go({z:1 + a, fx:.5, fy:.35}, .18, 'power2.out', m.t); go({z:1}, .75, 'power2.inOut', m.t + .18); }
+    else if (m.mode === 'zoom') { const f = m.focus || [.5,.4];
+      set({z:m.from ?? 1, fx:f[0], fy:f[1]}, m.t); go({z:m.to ?? 1.2}, Math.max(.3,end - m.t), 'sine.inOut', m.t + .001);
+      if (!m.hold) go({z:1}, .4, 'power2.inOut', end); }
+    else if (m.mode === 'pan') { const f0 = m.from || [.3,.4], f1 = m.to || [.7,.4];
+      go({z:m.zoom ?? 1.25, fx:f0[0], fy:f0[1]}, .35, 'power2.out', m.t); go({fx:f1[0], fy:f1[1]}, Math.max(.3,end - m.t - .35), 'sine.inOut', m.t + .35);
+      go({z:1, fx:.5, fy:.4}, .4, 'power2.inOut', end); }
+    else if (m.mode === 'anchor' && !window.HAS_CUTOUT) { const sc = m.scale ?? .6, w = STAGE_W*sc, hh = STAGE_H*sc;
+      const left = m.side === 'left' ? 40 : m.side === 'center' ? (STAGE_W - w)/2 : STAGE_W - w - 40, top = STAGE_H - hh - (STAGE_H > STAGE_W ? 230 : 60);
+      TL.to(pw,{left,top,width:w,height:hh,right:'auto',bottom:'auto',borderRadius:44,duration:.45,ease:'power3.inOut'},m.t);
+      TL.to(pw,{left:0,top:0,width:STAGE_W,height:STAGE_H,borderRadius:0,duration:.45,ease:'power3.inOut'},end); }
+  });
 })();
 
 // ---- spoken captions: S.captions = { style:'pill' | 'bold', words: 4, pos:'low' | 'mid' } builds small captions straight from words.js;
@@ -1244,7 +1387,7 @@ window.seekMedia = (t) => {
   return Promise.all(jobs);
 };
 
-function fit(){ const vp = document.getElementById('viewport'); stage.style.transform = `scale(${vp.offsetWidth/1080})`; }
+function fit(){ const vp = document.getElementById('viewport'); stage.style.transform = `scale(${vp.offsetWidth/STAGE_W})`; }
 window.addEventListener('resize', fit); fit();
 
 const scrub = document.getElementById('scrub'), tm = document.getElementById('time'), playBtn = document.getElementById('play');

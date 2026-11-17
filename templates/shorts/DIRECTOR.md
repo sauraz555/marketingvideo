@@ -4,9 +4,52 @@ This brief is for whoever builds the video: a person, Claude, or any other AI mo
 Python, ffmpeg and a browser (`python tools/shorts.py doctor` checks them). `python tools/shorts.py guide` prints this
 brief plus every scene type; `guide --json` gives the same catalogue as data.
 
-You direct short vertical videos for this repo with `tools/shorts.py`. You write the content (`projects/<name>/script.js`); you never change the engine (`short.html`, `tools/shorts.py`) unless the person asks.
+You direct short videos for this repo with `tools/shorts.py`: portrait (TikTok, Reels, Shorts) or landscape (YouTube, LinkedIn, websites). You write the content (`projects/<name>/script.js`); you never change the engine (`short.html`, `tools/shorts.py`) unless the person asks.
 
 Read `projects/<name>/segments.js` for the spoken line timings (run `python tools/shorts.py segments <name>` if it is missing). `projects/shorts-reference/` is a finished example that passes `lint`.
+
+## Start here: one command for the whole first draft
+The person gives you footage to edit or a script, and that is all you need to start:
+
+```
+python tools/shorts.py direct <name> --video clip.mp4  [--brand https://site] [--frame portrait|landscape] [--format "crimson explainer"] [--reference ref.mp4]
+python tools/shorts.py direct <name> --script script.txt [--voice voice.mp3] [--frame ...]
+```
+
+It does every step in order and says what it did:
+1. **Brand** (when `--brand`, `--logo` or `--accent` is given): logo, colours and fonts from the site, as `brand` does. `--reference` writes a frame grid of a reference video so you can study its style (then follow "Matching a reference video").
+2. **Footage:** copied in as `presenter.mp4` (re-encoded to H.264 when needed, `--from/--to` to trim) and its audio pulled out as `voice.mp3`. The frame follows the footage's own shape unless `--frame` says otherwise (16:9 footage can still make a 9:16 short).
+3. **Transcript:** word-by-word timings (`words.js`, faster-whisper locally; `transcript.txt` too). Without a voice the timing is estimated from the script.
+4. **Plan:** beats, each beat's job and a design for it (`plan.json`), in the format asked for or the one that fits.
+5. **Draft `script.js`**, every line commented with why it is there:
+   - a list said once (`timing, weight, rhythm and intention`) becomes one scene that keeps building: each name lands on the word that says it, and each meaning on the sentence that explains it (`pillar` / `diamonds` / `list` / `glass` / `tags`, by format);
+   - parallel lines (`For basic... For intermediate... For advanced...`) become `lanes`;
+   - places become a `map` with real positions and the route between them;
+   - numbers become `bignum` (and a punch-in on the footage), names of things become a `callout` beside the head, the hook, problem and payoff become big words, the last line becomes a `cta`.
+   - **Camera moves on the footage:** a slow push-in on the hook, a punch on each number, a pull-out on the payoff or call to action, slow push-ins or pans on long talking stretches, and the person stepping aside into a card (`anchor`) while a full-screen graphic is up.
+6. **Cut-out** with `tools/matte.py` when the model is in `tools/models/`, so graphics can sit behind the person. Without it every move still works on the whole picture.
+7. **lint** and **sheet**.
+
+The draft is a first pass by rule, never the finished video. Then you direct:
+- **Read the sheet and the transcript.** Fix the speech recognition's spelling of names, products and numbers (in `words.js` and in the scenes).
+- **Rewrite every on-screen word** so it reads as a headline, not a fragment of the sentence.
+- **Check every fact against a source.** Replace any scene the content does not support (a number without a source does not get a `bignum`).
+- **Add the media the draft cannot invent:** screenshots (`capture`), photos, b-roll, a map picture under the pins.
+- **Vary the scene types and keep something changing every 2-4 s.**
+- **Then:** `lint` (0 errors), `sheet`, a test render of the busiest 5 seconds, and the full `render`.
+
+### Camera moves (`moves` in script.js; with or without a cut-out)
+| Move | Use it for | Fields |
+|---|---|---|
+| `punch` | one word that matters (a number, a name): a quick push-in that settles back | `t`, `amount` (0.08-0.15) |
+| `zoom` | a slow push-in to build tension (`to` > `from`), or a pull-out to release it on the payoff (`to` < `from`, `hold: true` to stay) | `t`, `end`, `from`, `to`, `focus: [x, y]` (0-1 of the frame) |
+| `pan` | a long talking stretch: drift across the frame while zoomed in | `t`, `end`, `zoom`, `from: [x, y]`, `to: [x, y]` |
+| `anchor` | a full-screen graphic: the person shrinks into a card in a corner | `t`, `end`, `scale` (0.35-0.6), `side` |
+
+Never stack two moves at the same time, never move during a caption the viewer must read, and leave the face alone for at least 2 s between moves on a long talk. With a cut-out (`matte.py`) the anchor keeps the person cut out over the graphics; without one the whole picture shrinks into a rounded card.
+
+### Landscape (`frame: 'landscape'`, 1920x1080)
+YouTube, LinkedIn and website videos. The main scenes have their own landscape layout: captions, kinetic type, numbers, quote, stat, call to action, stamp, all crimson scenes and the map. Any other scene is drawn as a portrait panel beside the person, on the left when there is a presenter, or in the middle when there is not. There is no button column, so safe margins are about 96 px at the sides and 60-80 px at the top and bottom. With a presenter, keep graphics in the half of the frame the person is not in.
 
 ## 0. Configure first (always, before anything else)
 Do not start a video until the project is configured. Run `python tools/shorts.py config <name>` and read `projects/<name>/config.json`.

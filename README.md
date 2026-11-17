@@ -30,6 +30,15 @@ The `shorts-director` agent reads `config.json` first, asks you anything still u
 
 ## Quick start
 
+One command takes footage (or a script) to a complete first draft: brand kit, transcript, graphics on the right words, camera moves (punch, zoom, pan, the person stepping aside), cut-out, lint and contact sheet:
+
+```
+python tools/shorts.py direct my-topic --video clip.mp4 [--brand https://company.com] [--frame portrait|landscape] [--format "crimson explainer"]
+python tools/shorts.py direct my-topic --script script.txt [--voice voice.mp3]
+```
+
+Then review `projects/my-topic/qa/sheet.jpg`, refine `script.js`, and `render`. Step by step instead:
+
 ```
 python tools/shorts.py new my-topic --voice voice.mp3 [--presenter clip.mp4]   # creates projects/my-topic/ and lists the spoken lines
 # edit projects/my-topic/script.js (one scene per spoken line; see the comment at the top of the file)

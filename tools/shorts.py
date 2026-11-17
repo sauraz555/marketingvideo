@@ -4,6 +4,7 @@ Works from any shell, for a person or for any AI model: `guide` prints the whole
 `doctor` says what this machine can do, `lint --json` returns machine-readable problems. No service is compulsory.
 
 Run from the repo root:
+  python tools/shorts.py direct <name> --video clip.mp4 [--brand https://site] [--frame landscape] [--format ...]   # ONE COMMAND: a full first draft
   python tools/shorts.py guide [--json]            # how to make a short: the brief, every scene type, every command
   python tools/shorts.py doctor                    # what is installed (browser, ffmpeg, fonts, cut-out model, voice key)
   python tools/shorts.py new <name> [--voice <voice.mp3>] [--presenter <clip.mp4>]   # projects/<name>/
@@ -287,9 +288,11 @@ async def launch(pw, h264=False):
 
 async def open_page(pw, html, presenter, alpha=False, guides=False):
     browser = await launch(pw, h264=bool(presenter))
-    page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+    W, H = frame_size(html.parent)
+    page = await browser.new_page(viewport={"width": W, "height": H})
     page.issues = []      # anything that failed to load or threw: reported by sheet / lint / render
-    page.on("requestfailed", lambda r: page.issues.append("did not load: " + r.url.split("/")[-1]))
+    page.on("requestfailed", lambda r: None if (r.failure or "").endswith("ERR_ABORTED") and re.search(r"\.(mp4|webm|mov|m4v|mp3|wav)$", r.url, re.I)
+            else page.issues.append("did not load: " + r.url.split("/")[-1]))      # media range requests the browser drops on purpose are fine
     page.on("response", lambda r: r.status >= 400 and page.issues.append("did not load (%d): %s" % (r.status, r.url.split("/")[-1])))
     page.on("pageerror", lambda e: page.issues.append("script error: " + str(e).splitlines()[0]))
     q = "&".join(x for x in ("alpha=1" if alpha else "", "guides=1" if guides else "") if x)
@@ -304,7 +307,7 @@ async def open_page(pw, html, presenter, alpha=False, guides=False):
     await page.wait_for_timeout(400)
     await page.add_style_tag(content=(
         f"body{{padding:0!important;display:block!important;background:{'transparent' if alpha else '#000'}!important}}"
-        "#viewport{width:1080px!important;border-radius:0!important;box-shadow:none!important}"
+        f"#viewport{{width:{W}px!important;border-radius:0!important;box-shadow:none!important}}"
         "#controls{display:none!important}"))
     await page.evaluate("() => { fit(); TL.pause(); }")
     return browser, page
@@ -344,7 +347,8 @@ async def sheet(p, guides=True):
             shots.append((t, f))
         problems = issues_of(page) + await page.evaluate("() => window.PAGE_ERRORS || []")
         await browser.close()
-    cols, w, h = 6, 270, 480
+    FW, FH = frame_size(p)
+    cols, w, h = (6, 270, 480) if FH > FW else (4, 480, 270)
     rows = (len(shots) + cols - 1) // cols
     sheet_img = Image.new("RGB", (cols * w, rows * (h + 30)), "white")
     from PIL import ImageDraw
@@ -438,6 +442,15 @@ def _ease(x):
     return "(" + c + "*" + c + "*(3-2*" + c + "))"          # smoothstep
 
 
+def frame_size(p):
+    """(width, height) of the project's frame: SCRIPT.frame = 'landscape' -> 1920x1080, otherwise portrait 1080x1920."""
+    try:
+        txt = (p / "script.js").read_text(encoding="utf-8")
+    except OSError:
+        return 1080, 1920
+    return (1920, 1080) if re.search(r"""\bframe\s*:\s*['"]landscape['"]""", txt) else (1080, 1920)
+
+
 def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
     """presenter (graded) -> [blurred backdrop while shrunk] -> back graphics -> person (matte) -> front graphics.
     moves: 'anchor' = the cut-out person shrinks to a corner (graphics fill the space behind them);
@@ -445,10 +458,11 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
     import numpy as np
     from PIL import Image
     presenter = next(p.glob("presenter.*"))
-    ys = np.arange(1920, dtype=np.float32)
+    W, H = frame_size(p)
+    ys = np.arange(H, dtype=np.float32) * (1920 / H)        # the shade curve is drawn on a 1920-high scale
     top = 150 * (1 - np.clip(ys, 0, 900) / 900) ** 1.6
     bot = 170 * (np.clip(ys - 1150, 0, None) / 770) ** 1.4
-    arr = np.zeros((1920, 1080, 4), np.uint8)
+    arr = np.zeros((H, W, 4), np.uint8)
     arr[..., 3] = np.clip(top + bot, 0, 255).astype(np.uint8)[:, None]
     Image.fromarray(arr, "RGBA").save(out / "grad.png")
     start, D = f0 / fps, 0.45
@@ -461,12 +475,30 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
 
     S = "(1" + "".join("+(%s-1)*%s" % (m.get("scale", 0.6), pulse(m)) for m in anchors) + ")"
     side = {"right": 1, "left": -1}
-    DX = "(0" + "".join("+(%d*(540*(1-%s)-14))*%s" % (side.get(m.get("side", "right"), 0), m.get("scale", 0.6), pulse(m))
+    DX = "(0" + "".join("+(%d*(%d*(1-%s)-14))*%s" % (side.get(m.get("side", "right"), 0), W // 2, m.get("scale", 0.6), pulse(m))
                         for m in anchors) + ")"
     Z = "(1" + "".join("+%s*(%s-%s)" % (m.get("amount", 0.12), _ease("((%s-%s)/0.18)" % (T, m["t"])),
                                          _ease("((%s-(%s+0.18))/0.75)" % (T, m["t"]))) for m in punches) + ")"
-    zoom = ("scale=w='trunc(1080*%s/2)*2':h='trunc(1920*%s/2)*2':eval=frame,crop=1080:1920" % (Z, Z)) if punches else "null"
-    pscale = ("scale=w='trunc(1080*%s/2)*2':h='trunc(1920*%s/2)*2':eval=frame" % (S, S)) if anchors else "null"
+    # zoom (push-in / pull-out) and pan: a scale plus a focus point the crop follows
+    zooms = [m for m in moves if m.get("mode") in ("zoom", "pan")]
+    FX, FY = "(0.5", "(0.4"
+    for m in zooms:
+        t0, t1 = float(m["t"]), float(m.get("end", float(m["t"]) + 1))
+        r = _ease("((%s-%s)/%s)" % (T, t0, max(0.3, t1 - t0)))                    # 0 -> 1 across the move
+        back = "0" if m.get("hold") else _ease("((%s-%s)/0.4)" % (T, t1))          # 0 -> 1 after it ends
+        on = "gte(%s,%s)*(1-%s)" % (T, t0, back)
+        if m["mode"] == "zoom":
+            a_, b_ = float(m.get("from", 1)), float(m.get("to", 1.2))
+            Z = Z[:-1] + "+%s*((%s+(%s)*%s)-1))" % (on, a_, b_ - a_, r)
+            f = m.get("focus") or [0.5, 0.4]
+            FX += "+%s*(%s-0.5)" % (on, f[0]); FY += "+%s*(%s-0.4)" % (on, f[1])
+        else:
+            z = float(m.get("zoom", 1.25)); f0_, f1_ = m.get("from") or [0.3, 0.4], m.get("to") or [0.7, 0.4]
+            Z = Z[:-1] + "+%s*%s)" % (on, z - 1)
+            FX += "+%s*((%s+(%s)*%s)-0.5)" % (on, f0_[0], f1_[0] - f0_[0], r); FY += "+%s*((%s+(%s)*%s)-0.4)" % (on, f0_[1], f1_[1] - f0_[1], r)
+    FX, FY = "clip(%s),0,1)" % FX, "clip(%s),0,1)" % FY
+    zoom = ("scale=w='trunc(%d*%s/2)*2':h='trunc(%d*%s/2)*2':eval=frame,crop=%d:%d:x='(iw-ow)*%s':y='(ih-oh)*%s'" % (W, Z, H, Z, W, H, FX, FY)) if (punches or zooms) else "null"
+    pscale = ("scale=w='trunc(%d*%s/2)*2':h='trunc(%d*%s/2)*2':eval=frame" % (W, S, H, S)) if anchors else "null"
     ovp = ("overlay=x='(main_w-overlay_w)/2+%s':y='main_h-overlay_h':format=auto" % DX) if anchors else "overlay=format=auto"
     # backdrop intervals: union of the anchor moves (adjacent ones share one fade)
     spans = []
@@ -479,7 +511,7 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
             spans.append([m["t"], m["end"]])
     spans = [sp for sp in spans if not _has_bd(sp[0], sp[1])]
     pad = "tpad=stop_mode=clone:stop_duration=60"  # footage shorter than the voiceover holds its last frame
-    fit = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"   # any size or shape of footage fills the frame
+    fit = "scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1" % (W, H, W, H)   # any size or shape of footage fills the frame
     fc = ["[0:v]fps=%s,%s,%s,eq=contrast=1.04:saturation=1.06,format=rgb24,split=%d[va][vb]%s" % (fps, fit, pad, 3 if spans else 2, "[vc]" if spans else ""),
           "[1:v]fps=%s,%s,%s,format=gray[mv]" % (fps, fit, pad),
           "[vb][mv]alphamerge[pm]",
@@ -489,7 +521,7 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
     cur = "g0"
     if spans:
         n = len(spans)
-        blur = "[vc]scale=270:480,gblur=sigma=8,scale=1080:1920,eq=brightness=-0.2:saturation=0.9,format=rgba"
+        blur = "[vc]scale=%d:%d,gblur=sigma=8,scale=%d:%d," % (W // 4, H // 4, W, H) + "eq=brightness=-0.2:saturation=0.9,format=rgba"
         if n > 1:
             fc.append(blur + ",split=%d%s" % (n, "".join("[bl%d]" % i for i in range(n))))
         else:
@@ -569,8 +601,8 @@ def cmd_render(a):
         composite(p, matte, out, silent, a.fps, f0, f1, a.crf, moves, backdrops)
     else:
         if any(p.glob("presenter.*")) and re.search(r"\bmoves\s*:\s*\[\s*\{", (p / "script.js").read_text(encoding="utf-8")):
-            print("WARNING: script.js has presenter `moves`, but there is no cut-out (run tools/matte.py on the footage first).\n"
-                  "         The footage will not shrink or zoom; graphics sit on top of it.", file=sys.stderr)
+            print("NOTE: no cut-out, so the moves run on the whole picture (zoom, pan, the footage shrinks into a card) and graphics sit on top.\n"
+                  "      For graphics BEHIND the person, cut them out first: python tools/matte.py %s" % (p / "presenter.mp4"), file=sys.stderr)
         dur, f0, f1 = asyncio.run(frames(p, out, a.fps, a.workers, a.start, a.end))
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(a.fps), "-start_number", str(f0), "-i", str(out / "%05d.png"),
                         "-vf", TO_YUV, "-c:v", "libx264", "-preset", "slow", "-crf", str(a.crf), "-pix_fmt", "yuv420p",
@@ -581,7 +613,7 @@ def cmd_render(a):
         shutil.copy(silent, t)
         print(f"wrote {t} (test cut {f0 / a.fps:.1f}-{f1 / a.fps:.1f}s, no audio)")
         return
-    mp4 = p / "output" / f"{p.name}-1080x1920.mp4"
+    mp4 = p / "output" / ("%s-%dx%d.mp4" % ((p.name,) + frame_size(p)))
     mp4.parent.mkdir(exist_ok=True)
     voice = p / "voice.mp3"
     measured = mux_audio(silent, mp4, dur, voice if voice.exists() else None, a.music, a.music_vol, not a.no_loudnorm)
@@ -872,7 +904,7 @@ def cmd_brand(a):
 LINT_JS = """async () => {
   const st = document.getElementById('stage'), cs = getComputedStyle(st), px = v => parseFloat(cs.getPropertyValue(v)) || 0;
   const safe = {top: px('--safe-top'), bottom: px('--safe-bottom'), left: px('--safe-left'), right: px('--safe-right')};
-  const k = st.getBoundingClientRect().width / 1080, o = st.getBoundingClientRect();
+  const k = st.getBoundingClientRect().width / (window.STAGE_W || 1080), o = st.getBoundingClientRect();
   // the box of the text itself (a centred line in a full-width block must not count as touching the edges)
   const R = el => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; const rg = document.createRange();
     for (const n of el.childNodes) { if (n.nodeType !== 3 || !n.textContent.trim()) continue; rg.selectNodeContents(n);
@@ -927,7 +959,8 @@ async def lint(p):
         if not m["ok"]:
             add("error", "missing-file", "backdrop or footage did not load: %s" % m["src"])
     safe, scenes, dur = d["safe"], d["scenes"], d["dur"]
-    W, H = 1080, 1920
+    W, H = frame_size(p)
+    rail = RAIL_TOP if H > W else 0          # landscape: no button column, the right margin applies all the way down
     FULL = {"broll", "hero", "web", "doc", "photo", "phone", "screen", "mindmap", "stickies", "tags", "orb", "orbit"}     # picture scenes: only frame cut-off is checked, not the safe zone
     for sc, pr in zip(scenes, d["probes"]):
         i, typ, t = pr["i"], sc["type"], sc["t"]
@@ -941,7 +974,7 @@ async def lint(p):
             for b in pr["boxes"]:
                 side = ("top" if b["y"] < safe["top"] - 2 else "bottom" if b["y"] + b["h"] > H - safe["bottom"] + 2 else
                         "left" if b["x"] < safe["left"] - 2 else
-                        "right" if b["x"] + b["w"] > W - safe["right"] + 2 and b["y"] + b["h"] > RAIL_TOP else None)
+                        "right" if b["x"] + b["w"] > W - safe["right"] + 2 and b["y"] + b["h"] > rail else None)
                 if side and not (b in cut):
                     add("warn", "safe-zone", "“%s” sits in the %s unsafe area (app buttons / text cover it)" % (b["text"], side), t, i, typ)
                     break
@@ -1319,6 +1352,416 @@ def cmd_plan(a):
     print("\nwrote %s. This is a first pass by rule: read every beat, change what does not fit, then write script.js." % (p / "plan.json"))
 
 
+# ---------- direct: one command from footage (or a script) to a first draft of the whole edit ----------
+# Places the draft can put on a map without a network: name -> (lat, lon). Extend freely.
+GAZETTEER = {
+    "india": (22.0, 79.0), "delhi": (28.6, 77.2), "new delhi": (28.6, 77.2), "mumbai": (19.08, 72.88), "bangalore": (12.97, 77.59), "bengaluru": (12.97, 77.59),
+    "kolkata": (22.57, 88.36), "chennai": (13.08, 80.27), "hyderabad": (17.39, 78.49), "pune": (18.52, 73.86), "nepal": (28.4, 84.1), "kathmandu": (27.7, 85.32),
+    "pokhara": (28.21, 83.99), "dubai": (25.2, 55.27), "abu dhabi": (24.45, 54.38), "uae": (24.0, 54.0), "qatar": (25.3, 51.2), "doha": (25.29, 51.53),
+    "saudi arabia": (24.0, 45.0), "riyadh": (24.71, 46.68), "pakistan": (30.0, 70.0), "bangladesh": (24.0, 90.0), "dhaka": (23.81, 90.41), "sri lanka": (7.9, 80.8),
+    "london": (51.51, -0.13), "uk": (54.0, -2.0), "england": (52.5, -1.5), "ireland": (53.0, -8.0), "dublin": (53.35, -6.26), "paris": (48.86, 2.35), "france": (46.0, 2.0),
+    "berlin": (52.52, 13.4), "germany": (51.0, 10.0), "amsterdam": (52.37, 4.9), "netherlands": (52.2, 5.3), "spain": (40.0, -4.0), "madrid": (40.42, -3.7),
+    "italy": (42.8, 12.8), "rome": (41.9, 12.5), "sweden": (62.0, 15.0), "europe": (50.0, 10.0), "russia": (60.0, 90.0), "turkey": (39.0, 35.0), "istanbul": (41.01, 28.98),
+    "usa": (39.0, -98.0), "united states": (39.0, -98.0), "america": (39.0, -98.0), "new york": (40.71, -74.0), "san francisco": (37.77, -122.42),
+    "los angeles": (34.05, -118.24), "chicago": (41.88, -87.63), "canada": (56.0, -106.0), "toronto": (43.65, -79.38), "vancouver": (49.28, -123.12), "mexico": (23.0, -102.0),
+    "brazil": (-10.0, -55.0), "australia": (-25.0, 134.0), "sydney": (-33.87, 151.21), "melbourne": (-37.81, 144.96), "adelaide": (-34.93, 138.6),
+    "brisbane": (-27.47, 153.03), "perth": (-31.95, 115.86), "new zealand": (-41.0, 174.0), "auckland": (-36.85, 174.76), "singapore": (1.35, 103.82),
+    "malaysia": (4.0, 102.0), "thailand": (15.0, 101.0), "bangkok": (13.76, 100.5), "vietnam": (16.0, 108.0), "indonesia": (-2.0, 118.0), "philippines": (13.0, 122.0),
+    "japan": (36.0, 138.0), "tokyo": (35.68, 139.69), "china": (35.0, 103.0), "beijing": (39.9, 116.4), "shanghai": (31.23, 121.47), "hong kong": (22.32, 114.17),
+    "korea": (36.0, 128.0), "seoul": (37.57, 126.98), "egypt": (26.0, 30.0), "nigeria": (9.0, 8.0), "kenya": (0.0, 38.0), "south africa": (-30.0, 25.0),
+    "africa": (2.0, 20.0), "asia": (34.0, 100.0)}
+ORDINAL = r"^(?:and\s+)?(first(?:ly)?|second(?:ly)?|third(?:ly)?|fourth|fifth|next|finally|lastly|number (?:one|two|three|four|five)|one|two|three|four|five)\b[,.:]?\s*"
+FULLSCREEN = {"pillar", "diamonds", "lanes", "rules", "list", "glass", "compare", "chart", "dosdonts", "timeline", "quote", "mindmap", "map", "picklist", "orbit",
+              "skeleton", "line", "ring", "pills", "stat"}
+
+
+def _clean(w):
+    return re.sub(r"[^\w%$'-]", "", w.lower())
+
+
+WORDNUM = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+COUNT_NOUN = r"\b(principles|pillars|rules|steps|ways|lanes|stages|tips|things|reasons|tools|ideas|mistakes|levels|parts|questions|habits|lessons)\b"
+
+
+def _short(text, n=3):
+    ws, seen = [], set()
+    for w in re.findall(r"[\w%$'&+/-]+", text):
+        if w.lower() not in seen:
+            seen.add(w.lower())
+            ws.append(w)
+    while ws and ws[0].lower() in STOP:
+        ws.pop(0)
+    while ws and ws[-1].lower() in STOP:
+        ws.pop()
+    return " ".join(ws[:n])
+
+
+def _items(sent):
+    """'four principles: timing, weight, rhythm, and intention' -> ['Timing', 'Weight', 'Rhythm', 'Intention']"""
+    s = sent.split(":", 1)[1] if ":" in sent else sent
+    parts = [x.strip() for x in re.split(r",\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+", s.rstrip(".!?")) if x.strip()]
+    if len(parts) < 3 and not (":" in sent and len(parts) >= 2):
+        return []
+    if s.count(",") < 2 and ":" not in sent:          # a real list: "a, b, and c" (or "...: a and b")
+        return []
+    if any(len(x.split()) > 3 for x in parts[1:-1]):   # the middle of a list is short items, not clauses
+        return []
+    run = parts
+    if len(run[0].split()) > 3:
+        run[0] = " ".join(run[0].split()[-2:])
+    if len(run[-1].split()) > 3:
+        run[-1] = " ".join(run[-1].split()[:2])
+    out = [_short(x, 3) for x in run]
+    out = [x[:1].upper() + x[1:] for x in out if x and len(x.split()) <= 3]
+    return out[:6] if len(out) >= 2 else []
+
+
+def _places(sent):
+    low = " " + re.sub(r"[^\w ]", " ", sent.lower()) + " "
+    found = []
+    for name in sorted(GAZETTEER, key=len, reverse=True):
+        if " %s " % name in low and not any(name in f for f in found):
+            found.append(name)
+    return sorted(found, key=lambda n: low.find(" %s " % n))
+
+
+def _kin(key):
+    ws = str(key).split()
+    if not ws:
+        return key
+    return " ".join(ws[:-1] + ["*%s*" % ws[-1]]) if len(ws) > 1 else "*%s*" % ws[0]
+
+
+def _draft(p, plan, words, presenter, frame, style, has_voice):
+    """Turn plan.json beats into script.js: scenes with real content, timed to the words, and camera moves on the footage."""
+    W, H = (1920, 1080) if frame == "landscape" else (1080, 1920)
+    fmt = plan["format"]
+    beats = plan["beats"]
+    total = plan["duration"]
+    idx = [(i, _clean(w["w"])) for i, w in enumerate(words)]
+
+    def when(term, t0, t1, say=""):
+        """time the first word of `term` is said inside [t0, t1] (the beat); without word timings, estimated from its place in the sentence"""
+        first = _clean(str(term).split()[0]) if str(term).split() else ""
+        for i, w in idx:
+            if words[i]["s"] >= t0 - 0.15 and words[i]["s"] <= t1 + 0.15 and first and (w == first or (len(first) > 3 and w.startswith(first[:5]))):
+                return words[i]["s"]
+        if say and first:
+            ws = [_clean(x) for x in say.split()]
+            k = next((j for j, x in enumerate(ws) if x == first or (len(first) > 3 and x.startswith(first[:5]))), None)
+            if k is not None:
+                return round(t0 + (t1 - t0) * k / max(1, len(ws)), 2)
+        return t0
+
+    scenes, moves, used = [], [], set()
+    part = [0]
+
+    def add(sc, why):
+        sc["_why"] = why
+        scenes.append(sc)
+
+    for bi, b in enumerate(beats):
+        if bi in used:
+            continue
+        say, t0, t1, role, typ = b["say"], b["t"], b["end"], b["role"], b["scene"]
+        items = _items(say)
+        places = _places(say)
+        # parallel lines: "For a basic ..., For intermediate ..., For advanced ..." (or "If you ...") -> one lanes scene, a lane per line
+        lead = lambda x: re.match(r"^(?:and\s+|now\s*,?\s+)?(for|if you(?:'re| are)?|with)\s+(?:an?\s+|the\s+)?([\w-]+)", x, re.I)   # noqa: E731
+        if lead(say) and not items:
+            run = [bi]
+            while run[-1] + 1 < len(beats) and lead(beats[run[-1] + 1]["say"]) and lead(beats[run[-1] + 1]["say"]).group(1).lower() == lead(say).group(1).lower():
+                run.append(run[-1] + 1)
+            if len(run) >= 3:
+                lanes = []
+                for j in run:
+                    m_ = lead(beats[j]["say"])
+                    rest = beats[j]["say"][m_.end():]
+                    lanes.append({"title": m_.group(2).title(), "subs": [_short(rest, 4)] if _short(rest, 4) else []})
+                    used.add(j)
+                add({"t": t0, "end": round(beats[run[-1]]["end"] + 0.3, 2), "type": "lanes" if fmt in ("crimson explainer",) else "list",
+                     **({"label": _short(" ".join(beats[bi - 1]["say"].split()[-3:]), 3).title() if bi else "", "items": lanes, "at": [round(beats[j]["t"] - t0, 2) for j in run]}
+                        if fmt in ("crimson explainer",) else {"items": [x["title"] + (": " + x["subs"][0] if x["subs"] else "") for x in lanes],
+                                                              "at": [round(beats[j]["t"] - t0, 2) for j in run]})},
+                    "%d parallel lines (%s ...)" % (len(run), lead(say).group(1)))
+                continue
+        # a list said once, then explained one by one: one scene that keeps building (names on the list, meanings on the explanations)
+        if items and len(items) >= 2:
+            cn = re.search(COUNT_NOUN, say + " " + (beats[bi - 1]["say"] if bi else ""), re.I)
+            title = ("%d %s" % (len(items), cn.group(1).lower())).title() if cn else _short(b["key"], 3).title() or "Overview"
+            name_at = [round(when(x, t0, t1, say) - t0, 2) for x in items]
+            subs, sub_at, last_end = [""] * len(items), [None] * len(items), t1
+            for bj in range(bi + 1, min(len(beats), bi + 1 + 3 * len(items))):
+                nxt = beats[bj]
+                head = " ".join(re.sub(ORDINAL, "", nxt["say"], flags=re.I).split()[:4]).lower()
+                for k, x in enumerate(items):
+                    if sub_at[k] is None and _clean(x.split()[0]) in [_clean(h) for h in head.split()]:
+                        body = re.sub(r"^.*?\b%s\b[,.:]?\s*" % re.escape(x.split()[0]), "", nxt["say"], count=1, flags=re.I)
+                        sub_at[k] = round(nxt["t"] - t0, 2)
+                        used.add(bj)
+                        last_end = nxt["end"]
+                        if len(body.split()) < 3 and bj + 1 < len(beats):      # "First, timing." -> the meaning is the next sentence
+                            body = beats[bj + 1]["say"]
+                            used.add(bj + 1)
+                            last_end = beats[bj + 1]["end"]
+                        subs[k] = _short(body, 8)
+                        break
+            explained = sum(1 for x in sub_at if x is not None)
+            kind = {"crimson explainer": "diamonds" if len(items) <= 4 else "lanes", "product film": "glass", "creator explainer": "tags",
+                    "split explainer": "picklist", "story b-roll": "list"}.get(fmt, "list")
+            if kind == "diamonds" and explained >= 2 and len(items) <= 4:
+                part[0] += 1
+                sc = {"t": t0, "end": round(last_end + 0.3, 2), "type": "pillar" if part[0] % 2 else "diamonds"}
+                if sc["type"] == "pillar":
+                    sc.update(kicker="Part %d" % part[0], title=title,
+                              items=[{"name": x, "sub": subs[k]} for k, x in enumerate(items)], at=name_at,
+                              subAts=[s if s is not None else name_at[k] + 0.4 for k, s in enumerate(sub_at)])
+                else:
+                    sc.update(items=[{"name": x, "sub": subs[k]} for k, x in enumerate(items)], at=name_at,
+                              subAts=[s if s is not None else name_at[k] + 0.4 for k, s in enumerate(sub_at)])
+            elif kind == "lanes":
+                sc = {"t": t0, "end": round(last_end + 0.3, 2), "type": "lanes", "label": _short(b["key"], 4),
+                      "items": [{"title": x, "subs": [subs[k]] if subs[k] else []} for k, x in enumerate(items)],
+                      "at": [s if s is not None else name_at[k] for k, s in enumerate(sub_at)]}
+            elif kind == "tags":
+                sc = {"t": t0, "end": round(last_end + 0.3, 2), "type": "tags", "items": [{"text": x} for x in items[:3]]}
+            elif kind == "picklist":
+                sc = {"t": t0, "end": round(last_end + 0.3, 2), "type": "picklist", "items": items, "split": True}
+            else:
+                sc = {"t": t0, "end": round(last_end + 0.3, 2), "type": kind, "items": items[:5], "at": name_at[:5]}
+                if kind == "list":
+                    sc["title"] = title
+            add(sc, "a list of %d, %s" % (len(items), "each explained after" if explained else "said once"))
+            continue
+        if places and fmt != "product film":
+            pts = [GAZETTEER[x] for x in places[:5]]
+            add({"t": t0, "end": round(t1 + 0.3, 2), "type": "map", "pins": [{"label": x.title(), "lat": la, "lon": lo, "at": round(when(x, t0, t1, say) - t0, 2)}
+                                                                              for x, (la, lo) in zip(places, pts)], "route": len(pts) > 1},
+                "places named: " + ", ".join(places))
+            continue
+        num = re.search(NUM, say, re.I)
+        tk = when(b["key"], t0, t1)
+        if role == "number" and num:
+            v = num.group(0).strip()
+            w0 = v.split()[0].lower()
+            if w0 in WORDNUM:                                   # "four principles" -> 4 principles
+                v = "%d %s" % (WORDNUM[w0], " ".join(v.split()[1:]))
+            m_ = re.match(r"\$?([\d,.]+)\s*(.*)", v)
+            if presenter:
+                add({"t": tk, "end": round(t1 + 0.3, 2), "type": "bignum", "value": (m_.group(1).replace(",", "") if m_ else v),
+                     "unit": (m_.group(2) if m_ else "") or _short(say[num.end():], 3)}, "a number: huge behind the head")
+            else:
+                add({"t": tk, "type": "bignum", "value": (m_.group(1).replace(",", "") if m_ else v), "unit": (m_.group(2) if m_ else "") or _short(say[num.end():], 3)},
+                    "a number carries this beat")
+            if presenter:
+                moves.append({"mode": "punch", "t": round(tk, 2), "amount": 0.1, "_why": "punch on the number"})
+            continue
+        if role == "cta":
+            add({"t": t0, "type": "cta", "text": _short(say, 4)}, "call to action")
+            continue
+        if role == "compare" and re.search(r"\b(don'?t|never|stop|avoid)\b", say, re.I):
+            add({"t": t0, "end": round(t1 + 0.3, 2), "type": "dosdonts", "title": _short(b["key"], 3),
+                 "donts": [_short(x, 4) for x in re.split(r"\b(?:instead|rather than|but)\b", say)[:1]],
+                 "dos": [_short(x, 4) for x in re.split(r"\b(?:instead|rather than|but)\b", say)[1:2]] or ["(fill in)"]}, "do / don't")
+            continue
+        if bi == 0 or role in ("hook", "definition", "problem", "payoff"):
+            if presenter and role == "definition" and fmt in ("crimson explainer", "creator explainer"):
+                ax, ay = (int(W * 0.27), int(H * 0.62)) if frame == "portrait" else (int(W * 0.28), int(H * 0.7))
+                add({"t": tk, "end": round(t1 + 0.2, 2), "type": "callout", "text": _short(b["key"], 3).title(), "at": [ax, ay], "to": [int(W * 0.46), int(H * (0.52 if frame == "portrait" else 0.5))]},
+                    "names the idea beside the head")
+            elif fmt == "creator explainer" and presenter:
+                add({"t": t0, "end": round(t1 + 0.3, 2), "type": "headline", "title": _kin(_short(b["key"], 3))}, "headline above the head")
+            else:
+                add({"t": tk, "end": round(t1 + 0.3, 2), "type": "kinetic", "text": _kin(_short(b["key"], 4)), **({"pos": "top"} if presenter else {})},
+                    "%s in big words" % role)
+            continue
+        if not presenter:      # nobody on screen: every beat needs a picture
+            add({"t": t0, "type": "kinetic", "text": _kin(_short(b["key"], 4))}, "a beat without a presenter: its key words")
+    # ---- camera moves on the footage: a push-in on the hook, punches on numbers, the person steps aside for big graphics,
+    #      a pull-out on the payoff / call to action, and slow pushes or pans on long talking stretches so the frame keeps moving
+    if presenter:
+        busy = []
+        for sc in scenes:
+            if sc["type"] in FULLSCREEN:
+                e = sc.get("end") or sc["t"] + 3
+                moves.append({"mode": "anchor", "t": round(sc["t"], 2), "end": round(e, 2), "scale": 0.4, "side": "right", "_why": "the person steps aside for the %s" % sc["type"]})
+                busy.append((sc["t"], e))
+        if beats:
+            h = beats[0]
+            if not any(a_ < h["end"] and b_ > h["t"] for a_, b_ in busy):
+                moves.append({"mode": "zoom", "t": h["t"], "end": h["end"], "from": 1.0, "to": 1.12, "focus": [0.5, 0.35], "_why": "slow push-in on the hook"})
+                busy.append((h["t"], h["end"]))
+        for b in beats:
+            if b["role"] in ("payoff", "cta") and not any(a_ < b["end"] and b_ > b["t"] for a_, b_ in busy):
+                moves.append({"mode": "zoom", "t": b["t"], "end": b["end"], "from": 1.15, "to": 1.0, "focus": [0.5, 0.35], "hold": True, "_why": "pull out for the %s" % b["role"]})
+                busy.append((b["t"], b["end"]))
+        flip = 0
+        for b in beats:
+            if b["end"] - b["t"] >= 2.4 and not any(a_ < b["end"] and b_ > b["t"] for a_, b_ in busy):
+                flip += 1
+                mv = ({"mode": "zoom", "t": b["t"], "end": b["end"], "from": 1.0, "to": 1.1, "focus": [0.5, 0.35]} if flip % 2 else
+                      {"mode": "pan", "t": b["t"], "end": b["end"], "zoom": 1.15, "from": [0.42, 0.38], "to": [0.58, 0.38]})
+                mv["_why"] = "long talking beat: keep the frame moving"
+                moves.append(mv)
+                busy.append((b["t"], b["end"]))
+        moves = [m for m in moves if not (m["mode"] == "punch" and any(a_ <= m["t"] <= b_ for a_, b_ in busy))]
+        moves.sort(key=lambda m: m["t"])
+    scenes.sort(key=lambda s: s["t"])
+    if scenes and scenes[0]["t"] < 2.0:
+        scenes[0]["t"] = 0                                     # the hook is on screen from the first frame
+    keys = {k: v for k, v in plan.get("script_keys", {}).items() if not isinstance(v, str)}
+    script = {"frame": frame, "brand": "", "presenter": presenter or None}
+    if (p / "brand.js").exists():
+        script.pop("brand")
+    if not has_voice:
+        script.update(audio=None, duration=round(total, 1))
+    script.update(keys)
+    if fmt == "crimson explainer" or style == "crimson":
+        script["theme"] = {"accent": "#E3202E"}
+        script["backdrops"] = [{"style": "crimson", "t": 0, "end": round(total, 1), "fadeIn": 0, "fadeOut": 0}]
+    elif fmt == "product film":
+        script["backdrops"] = [{"style": "night", "t": 0, "end": round(total, 1), "fadeIn": 0, "fadeOut": 0}]
+    if presenter and words and "captions" not in script:
+        script["captions"] = {"style": "pill"}
+    if not presenter and "captions" in script and not words:
+        script.pop("captions")
+    head = ["// FIRST DRAFT written by `python tools/shorts.py direct` from plan.json (format: %s, frame: %s)." % (fmt, frame),
+            "// Every scene and move says why it is there. Read the contact sheet (qa/sheet.jpg), then fix wording, swap scenes,",
+            "// add photos / screens / b-roll where a note asks for them, and render. Field reference: python tools/shorts.py guide",
+            "window.SCRIPT = {"]
+    body = []
+    for k, v in script.items():
+        if v is None and k == "presenter":
+            continue
+        body.append("  %s: %s," % (k, json.dumps(v, ensure_ascii=False)))
+    if moves:
+        body.append("  moves: [")
+        for m in [dict(x) for x in moves]:
+            why = m.pop("_why", "")
+            body.append("    %s,   // %s" % (json.dumps(m, ensure_ascii=False), why))
+        body.append("  ],")
+    body.append("  scenes: [")
+    for sc in [dict(x) for x in scenes]:
+        why = sc.pop("_why", "")
+        sc = {"t": round(sc.pop("t"), 2), **sc}
+        body.append("    %s,   // %s" % (json.dumps(sc, ensure_ascii=False), why))
+    body.append("  ],")
+    (p / "script.js").write_text("\n".join(head + body + ["};", ""]), encoding="utf-8")
+    return scenes, moves
+
+
+def cmd_direct(a):
+    """footage or script in -> project, brand, audio, transcript, plan, a complete first-draft script.js with camera moves, cut-out, lint, sheet."""
+    name = a.project
+    p = ROOT / "projects" / name
+    src = pathlib.Path(a.video).resolve() if a.video else None
+    if not src and not a.script:
+        sys.exit("give the footage (--video clip.mp4) or the words (--script script.txt [--voice voice.mp3])")
+    if src and not src.exists():
+        sys.exit("no such file: %s" % src)
+    step = lambda s: print("\n== %s" % s, flush=True)   # noqa: E731
+    # 1. project
+    if not p.exists():
+        step("new project %s" % p)
+        shutil.copytree(TEMPLATE, p, ignore=shutil.ignore_patterns("README.md", "DIRECTOR.md", "scenes.json", "segments.js", "words.js"))
+        (p / "output").mkdir(exist_ok=True)
+        save_config(p, new_config())
+    else:
+        step("using project %s" % p)
+    # 2. footage -> presenter.mp4 (H.264 so the browser preview can play it) and voice.mp3
+    frame = a.frame
+    presenter = None
+    if src:
+        info = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,width,height", "-of", "csv=p=0", str(src)],
+                              capture_output=True, text=True).stdout.strip().split(",")
+        codec, vw, vh = info[0], int(info[1]), int(info[2])
+        if frame == "auto":
+            frame = "landscape" if vw > vh else "portrait"
+        dst = p / "presenter.mp4"
+        cut = (["-ss", str(a.start)] if a.start else []) + (["-to", str(a.end)] if a.end else [])
+        step("footage %dx%d %s -> presenter.mp4 (%s frame)" % (vw, vh, codec, frame))
+        if codec == "h264" and not cut and src.suffix.lower() == ".mp4":
+            shutil.copy(src, dst)
+        else:
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *cut, "-i", str(src), "-c:v", "libx264", "-crf", "16", "-preset", "fast", "-pix_fmt", "yuv420p",
+                            "-c:a", "aac", "-b:a", "192k", str(dst)], check=True)
+        presenter = "presenter.mp4"
+        if has_audio(dst):
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(dst), "-vn", "-ac", "1", "-ar", "44100", "-q:a", "2", str(p / "voice.mp3")], check=True)
+            print("audio -> voice.mp3")
+    elif a.voice:
+        shutil.copy(a.voice, p / "voice.mp3")
+    if frame == "auto":
+        frame = "portrait"
+    if a.script:
+        shutil.copy(a.script, p / "script.txt")
+    has_voice = (p / "voice.mp3").exists()
+    # 3. brand: logo, colours and fonts from the brand's site, or given by hand; a reference video's look is studied from a frame grid
+    if a.brand or a.logo or a.accent:
+        step("brand kit")
+        cmd_brand(argparse.Namespace(project=name, url=a.brand, name=a.brand_name, handle=None, accent=a.accent, secondary=None, dark=None, bg=None, logo=a.logo, clear=False))
+    if a.reference:
+        step("reference video -> frame grid to study its style")
+        cmd_frames(argparse.Namespace(project=name, video=a.reference, every=a.every))
+    # 4. words: transcript with word times
+    if has_voice and not (p / "words.js").exists():
+        step("transcribe (word timings)")
+        try:
+            cmd_align(argparse.Namespace(project=name, source=None, text=a.script, engine="auto", model=a.model, language=a.language))
+        except SystemExit as e:
+            if not a.script:
+                raise
+            print("could not time the words (%s); timing is estimated from the script" % str(e).splitlines()[0])
+    words = []
+    if (p / "words.js").exists():
+        m = re.search(r"window\.WORDS\s*=\s*(\[.*\]);", (p / "words.js").read_text(encoding="utf-8"), re.S)
+        words = json.loads(m.group(1)) if m else []
+        if not a.script:
+            (p / "transcript.txt").write_text(" ".join(w["w"] for w in words), encoding="utf-8")
+    # 5. config answers the setup would otherwise ask
+    fmt = a.format
+    sets = ["presenter=%s" % ("yes, footage provided" if presenter else "no"),
+            "voice_source=%s" % ("the presenter's own audio" if presenter and has_voice else "i provide an audio file" if has_voice else "no voice (captions and music only)")]
+    if fmt != "auto":
+        sets.append("format=%s" % fmt)
+    cfg = load_config(p) or new_config()
+    for item in sets:
+        k_, _, v_ = item.partition("=")
+        cfg["answers"][k_] = v_
+    save_config(p, cfg)
+    # 6. plan
+    step("plan the beats")
+    cmd_plan(argparse.Namespace(project=name, text=a.script, format=fmt, json=False))
+    plan = json.loads((p / "plan.json").read_text(encoding="utf-8"))
+    if words:
+        plan["duration"] = round(max(plan["duration"], words[-1]["e"] + 0.6), 1)
+    # 7. the draft
+    step("write the first draft: script.js")
+    scenes, moves = _draft(p, plan, words, presenter, frame, a.style, has_voice)
+    for sc in scenes:
+        print("  %6.2fs  %-9s %s" % (sc["t"], sc["type"], json.dumps({k: v for k, v in sc.items() if k not in ("t", "type", "end")}, ensure_ascii=False)[:100]))
+    for m in moves:
+        print("  %6.2fs  move:%-7s %s" % (m["t"], m["mode"], "-> %.2fs" % m["end"] if "end" in m else ""))
+    # 8. cut-out, so graphics can sit behind the person
+    if presenter and not a.no_cutout:
+        model = ROOT / "tools" / "models" / "rvm_mobilenetv3_fp32.onnx"
+        if model.exists():
+            step("cut the person out (this takes a while on a CPU)")
+            subprocess.run([sys.executable, str(ROOT / "tools" / "matte.py"), str(p / "presenter.mp4")], check=False)
+        else:
+            print("\nNOTE: no cut-out model, so moves happen on the whole picture (zoom, pan, the footage shrinks into a card).\n"
+                  "      For graphics BEHIND the person: python tools/matte.py --download   then   python tools/matte.py %s" % (p / "presenter.mp4"))
+    # 9. check
+    step("lint")
+    try:
+        cmd_lint(argparse.Namespace(project=name, json=False, strict=False))
+    except SystemExit:
+        pass
+    step("contact sheet")
+    asyncio.run(sheet(p, guides=True))
+    print("\nDraft ready. Look at %s, edit %s, then:  python tools/shorts.py render %s" % (p / "qa" / "sheet.jpg", p / "script.js", name))
+
+
 # ---------- guide / doctor: for any person or AI model working from a shell ----------
 def cmd_guide(a):
     cat = json.loads((TEMPLATE / "scenes.json").read_text(encoding="utf-8"))
@@ -1426,6 +1869,15 @@ def main():
     pl = sub.add_parser("plan", help="first-pass storyboard from the script: beats, their job, a design for each"); pl.add_argument("project")
     pl.add_argument("--text", help="the script or transcript (default: script.txt in the project, else words.js)")
     pl.add_argument("--format", default="auto", choices=["auto"] + list(DESIGNS)); pl.add_argument("--json", action="store_true")
+    di = sub.add_parser("direct", help="ONE COMMAND: footage or a script in -> brand, transcript, plan, a full first-draft edit with graphics and camera moves, cut-out, lint, sheet")
+    di.add_argument("project"); di.add_argument("--video", help="the footage to edit (a person talking, any size)"); di.add_argument("--script", help="the words, if there is no footage (or to fix the transcript)")
+    di.add_argument("--voice", help="voiceover for a script"); di.add_argument("--frame", choices=["auto", "portrait", "landscape"], default="auto", help="auto = the footage's own shape")
+    di.add_argument("--format", default="auto", choices=["auto"] + list(DESIGNS)); di.add_argument("--style", help="style pack to lean on, e.g. crimson")
+    di.add_argument("--brand", help="brand website: logo, colours, fonts are read from it"); di.add_argument("--brand-name"); di.add_argument("--logo"); di.add_argument("--accent")
+    di.add_argument("--reference", help="a reference video whose look to study (writes a frame grid)"); di.add_argument("--every", type=float, default=2.0)
+    di.add_argument("--from", dest="start", type=float, help="use the footage from this second"); di.add_argument("--to", dest="end", type=float, help="... to this second")
+    di.add_argument("--model", default="small", help="speech model for the transcript"); di.add_argument("--language")
+    di.add_argument("--no-cutout", action="store_true", help="skip cutting the person out")
     gd = sub.add_parser("guide", help="the brief, scene types and commands"); gd.add_argument("--json", action="store_true")
     sub.add_parser("doctor", help="what this machine can do")
     r = sub.add_parser("render"); r.add_argument("project"); r.add_argument("--fps", type=int, default=30)
@@ -1457,7 +1909,7 @@ def main():
     a = ap.parse_args()
     {"new": cmd_new, "segments": cmd_segments, "sheet": cmd_sheet, "render": cmd_render,
      "capture": cmd_capture, "frames": cmd_frames, "config": cmd_config, "backdrop": cmd_backdrop,
-     "brand": cmd_brand, "plan": cmd_plan, "lint": cmd_lint, "align": cmd_align, "voice": cmd_voice, "guide": cmd_guide, "doctor": cmd_doctor}[a.cmd](a)
+     "brand": cmd_brand, "plan": cmd_plan, "direct": cmd_direct, "lint": cmd_lint, "align": cmd_align, "voice": cmd_voice, "guide": cmd_guide, "doctor": cmd_doctor}[a.cmd](a)
 
 
 main()

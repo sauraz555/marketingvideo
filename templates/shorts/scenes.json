@@ -33,10 +33,11 @@
     "presenter": "talking-head clip in the project folder, or null",
     "presenterOffset": "seconds to skip at the start of the presenter clip",
     "backdrops": "[{ src, t, end, zoom, pan, focus, dim, blur, fadeIn, fadeOut }] image/video files, or built-in backgrounds [{ style:'white' | 'sky' | 'night' | 'brand' | 'paper' | 'crimson', t, end, ink:'dark' | 'light' }]",
-    "moves": "presenter only, needs a matte: [{ t, end, mode:'anchor', scale:0.6, side:'right'|'left'|'center' }, { t, mode:'punch', amount:0.12 }]",
+    "moves": "[{ mode:'punch', t, amount } | { mode:'zoom', t, end, from, to, focus:[x,y], hold } | { mode:'pan', t, end, zoom, from:[x,y], to:[x,y] } | { mode:'anchor', t, end, scale, side }] camera moves on the footage (focus/from/to are 0-1 of the frame). Work with or without a cut-out",
     "scenes": "the list of scenes below",
     "captions": "{ style:'pill' | 'outline' | 'bold' | 'word', words:4, pos:'low' | 'mid' | 'split' } spoken captions built from words.js, each word turning solid as it is said ('word' = one word at a time); only when captions are in the voice's language",
-    "splitCard": "{ left, top, width, height, radius } where the presenter card sits during split scenes (default: bottom third)"
+    "splitCard": "{ left, top, width, height, radius } where the presenter card sits during split scenes (default: bottom third)",
+    "frame": "'portrait' (default, 1080x1920) | 'landscape' (1920x1080). Landscape has its own layout for the main scenes; the rest are drawn as a portrait panel beside the person"
   },
   "timing": {
     "t / end": "exact seconds",
@@ -571,6 +572,21 @@
         "bend"
       ],
       "notes": "at:[x,y] pill centre px, to:[x,y] where the curve ends. 1-3 words. Keep it off the face."
+    },
+    "map": {
+      "use": "places the script names, pinned where they really are, with the journey drawn pin to pin and the camera visiting each",
+      "required": [
+        "pins"
+      ],
+      "optional": [
+        "route",
+        "title",
+        "img",
+        "bounds",
+        "follow",
+        "region"
+      ],
+      "notes": "pins:[{label, lat, lon, at}] (or x, y in frame px). route:true draws the path in order. img + bounds:[north, west, south, east] puts a map picture under the pins (e.g. a captured OpenStreetMap view); without it the pins sit on a dotted grid with latitude/longitude lines. `direct` fills this in for any of the places it knows."
     }
   },
   "common_scene_keys": [

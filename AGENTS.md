@@ -3,9 +3,10 @@
 This repo makes motion videos from HTML + GSAP, rendered to MP4 with a headless browser and ffmpeg. Everything runs
 from the shell, so any model or person can drive it. `CLAUDE.md` holds the same project rules for Claude Code.
 
-## Portrait shorts (TikTok / Reels / YouTube Shorts, 1080x1920)
+## Shorts: portrait (TikTok / Reels / YouTube Shorts, 1080x1920) or landscape (1920x1080)
 
 ```
+python tools/shorts.py direct <name> --video clip.mp4 [--brand https://site] [--frame landscape]   # ONE COMMAND: a full first draft
 python tools/shorts.py doctor          # what this machine can do (nothing optional is required)
 python tools/shorts.py guide           # the full brief, every scene type, every command   (--json for data)
 python tools/shorts.py new <name> --voice voice.mp3

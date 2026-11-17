@@ -7,4 +7,4 @@ opencv-python>=4.9        # or opencv-python-headless on a server
 onnxruntime>=1.18
 
 # word timings for shorts (optional; `tools/shorts.py align`)
-# faster-whisper>=1.0
+faster-whisper>=1.0      # transcript with word timings for `direct` / `align` (local, free; downloads a model once)
