@@ -1,20 +1,29 @@
 """Portrait shorts (TikTok / Reels / Shorts, 1080x1920) from templates/shorts/.
 
+Works from any shell, for a person or for any AI model: `guide` prints the whole brief and the scene catalogue,
+`doctor` says what this machine can do, `lint --json` returns machine-readable problems. No service is compulsory.
+
 Run from the repo root:
-  python tools/shorts.py new <name> --voice <voice.mp3> [--presenter <clip.mp4>]   # projects/<name>/
+  python tools/shorts.py guide [--json]            # how to make a short: the brief, every scene type, every command
+  python tools/shorts.py doctor                    # what is installed (browser, ffmpeg, fonts, cut-out model, voice key)
+  python tools/shorts.py new <name> [--voice <voice.mp3>] [--presenter <clip.mp4>]   # projects/<name>/
   python tools/shorts.py config <name> --interactive   # project setup questions (asked first; answers saved in config.json)
-  python tools/shorts.py backdrop <name> [--video] [--from-video clip.mp4]   # free backdrop, no account needed
+  python tools/shorts.py brand <name> --url https://company.com   # read name, logo and colours from the brand's site -> brand.js
+  python tools/shorts.py brand <name> --name "Acme" --accent "#E4002B" [--logo logo.png]   # or give them yourself
+  python tools/shorts.py voice <name> --text script.txt [--voice-id ID]   # optional: ElevenLabs voice.mp3 + words.js
   python tools/shorts.py segments <name>          # find the spoken lines in voice.mp3 -> segments.js
-  python tools/shorts.py sheet <name>             # QA contact sheet of every scene -> projects/<name>/qa/sheet.jpg
-  python tools/shorts.py render <name> [--music bg.mp3] [--fps 30]   # -> projects/<name>/output/<name>-1080x1920.mp4
+  python tools/shorts.py align <name> [--from words.json|subs.srt] [--text script.txt]   # word timings -> words.js
+  python tools/shorts.py plan <name> --text script.txt   # director's first pass: beats, format and a design per beat -> plan.json
+  python tools/shorts.py backdrop <name> [--video] [--from-video clip.mp4]   # free backdrop, no account needed
   python tools/shorts.py capture <name> --url <page> [--find "exact text on the page"] [--name shot]
-      # phone-width screenshot of a public page -> projects/<name>/shots/<shot>.png plus <shot>.json:
-      # headings, the element holding --find, and a ready-to-paste "web" scene (highlight already placed)
+  python tools/shorts.py lint <name> [--json]     # rule check: safe zones, overlaps, cut-off text, missing files, pacing
+  python tools/shorts.py sheet <name>             # QA contact sheet of every scene -> projects/<name>/qa/sheet.jpg
+  python tools/shorts.py render <name> [--music bg.mp3] [--fps 30] [--from 3 --to 8]   # -> projects/<name>/output/<name>-1080x1920.mp4
 
 A project holds short.html (engine, copied from the template), script.js (the content you edit),
-segments.js (written by `segments`), voice.mp3 and optionally presenter.mp4 (with people) and images.
+segments.js / words.js (written by `segments` / `align`), voice.mp3 and optionally presenter.mp4 and images.
 """
-import argparse, asyncio, json, pathlib, re, shutil, subprocess, sys
+import argparse, asyncio, base64, json, os, pathlib, re, shutil, subprocess, sys, urllib.error, urllib.request, uuid
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TEMPLATE = ROOT / "templates" / "shorts"
@@ -34,22 +43,32 @@ def duration(path):
     return float(out.strip())
 
 
+def has_audio(path):
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True).stdout
+    return bool(out.strip())
+
+
 # ---------- configuration (asked before anything else) ----------
 CONFIG_QUESTIONS = [
     ("voice_language", "What language is the voiceover?", ["nepali", "english", "nepali + english mix"], "nepali + english mix"),
     ("caption_language", "What language should the on-screen captions be?", ["english", "nepali", "same as the voice"], "english"),
     ("voice_source", "Where does the voiceover come from?", ["i provide an audio file", "generate it with a voice service I have (e.g. ElevenLabs)", "the presenter's own audio", "no voice (captions and music only)"], "i provide an audio file"),
     ("voice_name", "Voice name (only if generating; leave blank otherwise)", None, ""),
+    ("format", "What kind of short?", ["data explainer (voice, bold captions, charts and sources)", "product film (big type, 3D phone, cards; little or no voice)", "creator explainer (presenter intercut with a mind map, notes and screen recordings)", "split explainer (presenter card below, diagram panel above, one-word captions)", "story b-roll (full-screen footage with small spoken captions)", "match a reference video I will give you"], "data explainer (voice, bold captions, charts and sources)"),
     ("presenter", "Is there a person on camera?", ["no", "yes, footage provided"], "no"),
-    ("look", "Visual look", ["interlace", "dark", "warm"], "interlace"),
+    ("brand", "Is this for a brand? Give its website (the logo, colours and name are read from it), or 'none' for a clean neutral design", None, "none"),
+    ("look", "Visual look", ["auto (the brand's colours if a brand is given, otherwise clean)", "clean", "dark", "warm"], "auto (the brand's colours if a brand is given, otherwise clean)"),
     ("backdrop_mode", "Backdrops behind the scenes", ["images", "video clips", "mixed images and video", "none (plain background)"], "images"),
     ("backdrop_tool", "Where do the backdrops come from? Nothing here is compulsory: 'auto' uses whatever image or video generators this session has, and falls back to free options if there are none", ["auto (use what I have)", "my own files", "free built-in gradients (no account)", "frames from my footage", "kling", "elevenlabs", "higgsfield", "bloom", "other"], "auto (use what I have)"),
     ("backdrop_budget", "Spend limit for generated media (number and unit, e.g. '1 USD' or '100 credits'), or 'free only'", None, "free only"),
-    ("length_seconds", "Target length in seconds", None, "45-60"),
+    ("length_seconds", "Target length in seconds (20-35 holds attention best in the studies we found; longer is fine for a deeper topic)", None, "20-35"),
     ("music", "Background music", ["none", "my own licensed track"], "none"),
     ("logo", "Logo file inside the project folder", None, "logo.png"),
     ("sources", "Check facts on official pages and show the sources on screen?", ["yes", "no"], "yes"),
     ("privacy", "Names and personal details", ["no client names", "names are allowed"], "no client names"),
+    ("safe_zone", "Keep text clear of the app buttons for", ["organic posts", "paid ads (stricter)"], "organic posts"),
+    ("ai_disclosure", "Does the video contain realistic AI-made people, voices or places? (platforms require their AI label on upload if so)", ["no", "yes: remind me to switch on the AI label when I upload"], "no"),
 ]
 CONFIG_OPTIONAL = {"voice_name"}
 
@@ -64,7 +83,12 @@ def new_config():
 
 def load_config(p):
     f = config_path(p)
-    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+    if not f.exists():
+        return None
+    cfg = json.loads(f.read_text(encoding="utf-8"))
+    for k, _, _, _ in CONFIG_QUESTIONS:      # questions added after the project was made
+        cfg.setdefault("answers", {}).setdefault(k, None)
+    return cfg
 
 
 def save_config(p, cfg):
@@ -170,7 +194,7 @@ def cmd_new(a):
     dst = ROOT / "projects" / a.name
     if dst.exists():
         sys.exit(f"{dst} already exists")
-    shutil.copytree(TEMPLATE, dst, ignore=shutil.ignore_patterns("README.md", "segments.js"))
+    shutil.copytree(TEMPLATE, dst, ignore=shutil.ignore_patterns("README.md", "DIRECTOR.md", "scenes.json", "segments.js", "words.js"))
     (dst / "output").mkdir()
     if a.voice:
         shutil.copy(a.voice, dst / "voice.mp3")
@@ -192,7 +216,12 @@ def cmd_segments(a):
     p = proj(a.project)
     voice = p / "voice.mp3"
     if not voice.exists():
-        sys.exit(f"put the voiceover at {voice}")
+        pres = next(iter(p.glob("presenter.*")), None)
+        if pres and has_audio(pres):     # "the presenter's own audio": take the sound of the footage as the voice
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(pres), "-vn", "-c:a", "libmp3lame", "-q:a", "2", str(voice)], check=True)
+            print(f"took the voice from {pres.name} -> voice.mp3")
+        else:
+            sys.exit(f"put the voiceover at {voice} (or a presenter clip with sound in the project)")
     total = duration(voice)
     log = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(voice), "-af",
                           f"silencedetect=noise={a.noise}dB:d={a.min_pause}", "-f", "null", "-"],
@@ -215,20 +244,64 @@ def cmd_segments(a):
 
 
 # ---------- browser ----------
-async def open_page(pw, html, presenter, alpha=False):
-    browser = None
-    if presenter:  # bundled Chromium cannot decode H.264; Edge/Chrome can
+def _find_chrome():
+    """A Chromium binary when Playwright's own download is missing: $SHORTS_BROWSER, then the Playwright cache folders."""
+    env = os.environ.get("SHORTS_BROWSER")
+    if env and pathlib.Path(env).exists():
+        return env
+    roots = [os.environ.get("PLAYWRIGHT_BROWSERS_PATH"), "/opt/pw-browsers", str(pathlib.Path.home() / ".cache" / "ms-playwright"),
+             str(pathlib.Path.home() / "AppData" / "Local" / "ms-playwright"), str(pathlib.Path.home() / "Library" / "Caches" / "ms-playwright")]
+    for r in filter(None, roots):
+        r = pathlib.Path(r)
+        if r.is_file():
+            return str(r)
+        for pat in ("chromium-*/chrome-linux*/chrome", "chromium-*/chrome-win*/chrome.exe", "chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium", "chromium"):
+            hits = sorted(x for x in r.glob(pat) if x.is_file())
+            if hits:
+                return str(hits[-1])
+    for name in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge"):
+        w = shutil.which(name)
+        if w:
+            return w
+    return None
+
+
+async def launch(pw, h264=False):
+    """Edge/Chrome first when footage must be decoded (bundled Chromium has no H.264), else Playwright's Chromium, else any Chromium found."""
+    if os.environ.get("SHORTS_BROWSER"):
+        return await pw.chromium.launch(executable_path=os.environ["SHORTS_BROWSER"])
+    if h264:
         for ch in ("msedge", "chrome"):
             try:
-                browser = await pw.chromium.launch(channel=ch)
-                break
+                return await pw.chromium.launch(channel=ch)
             except Exception:
                 pass
-    browser = browser or await pw.chromium.launch()
+    try:
+        return await pw.chromium.launch()
+    except Exception as e:
+        exe = _find_chrome()
+        if not exe:
+            sys.exit("no browser found. Run `python -m playwright install chromium`, or set SHORTS_BROWSER to a Chrome/Chromium/Edge binary.\n(%s)" % str(e).splitlines()[0])
+        return await pw.chromium.launch(executable_path=exe)
+
+
+async def open_page(pw, html, presenter, alpha=False, guides=False):
+    browser = await launch(pw, h264=bool(presenter))
     page = await browser.new_page(viewport={"width": 1080, "height": 1920})
-    await page.goto(html.as_uri() + ("?alpha=1" if alpha else ""), wait_until="load")
-    await page.evaluate("() => document.fonts.ready")
-    await page.wait_for_timeout(1200)
+    page.issues = []      # anything that failed to load or threw: reported by sheet / lint / render
+    page.on("requestfailed", lambda r: page.issues.append("did not load: " + r.url.split("/")[-1]))
+    page.on("response", lambda r: r.status >= 400 and page.issues.append("did not load (%d): %s" % (r.status, r.url.split("/")[-1])))
+    page.on("pageerror", lambda e: page.issues.append("script error: " + str(e).splitlines()[0]))
+    q = "&".join(x for x in ("alpha=1" if alpha else "", "guides=1" if guides else "") if x)
+    await page.goto(html.as_uri() + ("?" + q if q else ""), wait_until="load")
+    if not await page.evaluate("() => !!window.gsap && typeof TL !== 'undefined'"):
+        await browser.close()
+        sys.exit("the page did not start: %s\n(GSAP is in vendor/ of the template; an old project without it needs the network, or copy templates/shorts/vendor into it)" % "; ".join(page.issues[:5]))
+    # fonts: wait, but never hang (a blocked font request must not stall the render)
+    ok = await page.evaluate("() => Promise.race([document.fonts.ready.then(() => true), new Promise(r => setTimeout(() => r(false), 8000))])")
+    if not ok:
+        page.issues.append("fonts were not ready after 8 s (text may use a fallback font)")
+    await page.wait_for_timeout(400)
     await page.add_style_tag(content=(
         f"body{{padding:0!important;display:block!important;background:{'transparent' if alpha else '#000'}!important}}"
         "#viewport{width:1080px!important;border-radius:0!important;box-shadow:none!important}"
@@ -237,28 +310,39 @@ async def open_page(pw, html, presenter, alpha=False):
     return browser, page
 
 
+def issues_of(page):
+    seen, out = set(), []
+    for x in page.issues:
+        if x not in seen and not any(o in x for o in ("segments.js", "words.js", "brand.js")):   # optional files
+            seen.add(x)
+            out.append(x)
+    return out
+
+
 async def seek(page, t):
     await page.evaluate("async t => { TL.seek(t); await window.seekMedia(t); }", t)
 
 
 # ---------- sheet ----------
-async def sheet(p):
+async def sheet(p, guides=True):
     from PIL import Image
     html = p / "short.html"
     qa = p / "qa"
     qa.mkdir(exist_ok=True)
     from playwright.async_api import async_playwright
     async with async_playwright() as pw:
-        browser, page = await open_page(pw, html, any(p.glob("presenter.*")))
-        times = await page.evaluate("""() => { const d = window.DUR; const ts = new Set();
-            TL.getChildren(false, true, false).forEach(c => { const t = c.startTime(); if (t > .05 && t < d) ts.add(Math.round((t + .9) * 10) / 10); });
-            return [...ts].sort((a, b) => a - b).filter((t, i, a) => i === 0 || t - a[i - 1] > .8).concat([d - .1]); }""")
+        browser, page = await open_page(pw, html, any(p.glob("presenter.*")), guides=guides)
+        # one settled frame per scene (everything revealed, just before it leaves), plus the first and last frame
+        times = await page.evaluate("""() => { const d = window.DUR, ts = new Set([0.6, +(d - .1).toFixed(1)]);
+            window.SCENE_INFO.forEach(s => ts.add(+Math.max(s.t + .3, Math.min(s.end - .45, s.t + 4)).toFixed(1)));
+            return [...ts].filter(t => t > 0 && t < d).sort((a, b) => a - b).filter((t, i, a) => i === 0 || t - a[i - 1] > .25); }""")
         shots = []
         for t in times:
             await seek(page, t)
             f = qa / f"t{t:06.1f}.jpg"
             await page.screenshot(path=str(f), type="jpeg", quality=80)
             shots.append((t, f))
+        problems = issues_of(page) + await page.evaluate("() => window.PAGE_ERRORS || []")
         await browser.close()
     cols, w, h = 6, 270, 480
     rows = (len(shots) + cols - 1) // cols
@@ -271,37 +355,46 @@ async def sheet(p):
         d.text((x + 8, y + 8), f"{t:.1f}s", fill="black")
     out = qa / "sheet.jpg"
     sheet_img.save(out, quality=85)
-    print(f"wrote {out} ({len(shots)} moments)")
+    print(f"wrote {out} ({len(shots)} moments{', red bands = platform buttons / unsafe area' if guides else ''})")
+    for x in dict.fromkeys(problems):
+        print("PROBLEM:", x)
+    if any(p.glob("presenter.*")) and any(p.glob("*matte*.mkv")):
+        print("NOTE: this project has a cut-out. The sheet shows the browser preview (graphics over the footage), not the final\n"
+              "      layering. Check that with a short test render: python tools/shorts.py render %s --from 0 --to 3" % p.name)
+    return problems
 
 
 def cmd_sheet(a):
     warn_config(proj(a.project))
-    asyncio.run(sheet(proj(a.project)))
+    asyncio.run(sheet(proj(a.project), guides=not a.no_guides))
 
 
 # ---------- render ----------
-async def frames(p, out, fps, workers=4):
+async def frames(p, out, fps, workers=4, start=None, end=None):
     """Screenshot every frame as lossless PNG; `workers` browsers each take an interleaved share of frames."""
     from playwright.async_api import async_playwright
     presenter = any(p.glob("presenter.*"))
     async with async_playwright() as pw:
         b0, pg0 = await open_page(pw, p / "short.html", presenter)
         dur = await pg0.evaluate("() => window.DUR")
-        total = int(round(dur * fps))
+        f0 = int(round((start or 0) * fps))
+        total = min(int(round(dur * fps)), int(round((end if end is not None else dur) * fps)))
         done = [0]
 
         async def worker(k, browser, page):
-            for i in range(k, total, workers):
+            for i in range(f0 + k, total, workers):
                 await seek(page, i / fps)
                 await page.screenshot(path=str(out / f"{i:05d}.png"), type="png")
                 done[0] += 1
                 if done[0] % 300 == 0:
-                    print(f"frame {done[0]}/{total}", flush=True)
+                    print(f"frame {done[0]}/{total - f0}", flush=True)
             await browser.close()
 
+        for x in issues_of(pg0):
+            print("PROBLEM:", x, file=sys.stderr)
         others = [await open_page(pw, p / "short.html", presenter) for _ in range(workers - 1)]
         await asyncio.gather(*(worker(k, b, pg) for k, (b, pg) in enumerate([(b0, pg0)] + others)))
-        return dur
+        return dur, f0, total
 
 
 async def frames_layered(p, out, fps, workers=4, start=None, end=None):
@@ -333,6 +426,11 @@ async def frames_layered(p, out, fps, workers=4, start=None, end=None):
 
         await asyncio.gather(*(worker(k, b, pg) for k, (b, pg) in enumerate(pages)))
     return dur, f0, f1, moves, backdrops
+
+
+TO_YUV = "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p"     # RGB frames -> video-range BT.709, the colour phones expect
+BT709 = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"]
+LOUD = "I=-14:TP=-1:LRA=11"      # loudness the platforms play back at (convention; see reports/)
 
 
 def _ease(x):
@@ -381,8 +479,9 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
             spans.append([m["t"], m["end"]])
     spans = [sp for sp in spans if not _has_bd(sp[0], sp[1])]
     pad = "tpad=stop_mode=clone:stop_duration=60"  # footage shorter than the voiceover holds its last frame
-    fc = ["[0:v]fps=%s,%s,eq=contrast=1.04:saturation=1.06,format=rgb24,split=%d[va][vb]%s" % (fps, pad, 3 if spans else 2, "[vc]" if spans else ""),
-          "[1:v]fps=%s,%s,format=gray[mv]" % (fps, pad),
+    fit = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"   # any size or shape of footage fills the frame
+    fc = ["[0:v]fps=%s,%s,%s,eq=contrast=1.04:saturation=1.06,format=rgb24,split=%d[va][vb]%s" % (fps, fit, pad, 3 if spans else 2, "[vc]" if spans else ""),
+          "[1:v]fps=%s,%s,%s,format=gray[mv]" % (fps, fit, pad),
           "[vb][mv]alphamerge[pm]",
           "[va]%s[vz]" % zoom,
           "[pm]%s,%s[pz]" % (zoom, pscale),
@@ -401,7 +500,7 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
             cur = "g%d" % (i + 1)
     fc += ["[%s][2:v]overlay=format=auto[b1]" % cur,
            "[b1][pz]%s[b2]" % ovp,
-           "[b2][3:v]overlay=format=auto,format=yuv420p[v]"]
+           "[b2][3:v]overlay=format=auto,%s[v]" % TO_YUV]
     cmd = ["ffmpeg", "-y", "-loglevel", "error",
            "-ss", "%.3f" % start, "-i", str(presenter),
            "-ss", "%.3f" % start, "-i", str(matte),
@@ -411,8 +510,44 @@ def composite(p, matte, out, silent, fps, f0, f1, crf, moves=(), backdrops=()):
     if backdrops:
         cmd += ["-framerate", str(fps), "-start_number", str(f0), "-i", str(out / "bd" / "%05d.png")]
     cmd += ["-filter_complex", ";".join(fc), "-map", "[v]", "-frames:v", str(f1 - f0),
-           "-c:v", "libx264", "-preset", "slow", "-crf", str(crf), "-pix_fmt", "yuv420p", "-profile:v", "high", str(silent)]
+           "-c:v", "libx264", "-preset", "slow", "-crf", str(crf), "-pix_fmt", "yuv420p", "-profile:v", "high", *BT709, str(silent)]
     subprocess.run(cmd, check=True)
+
+
+def mux_audio(silent, mp4, dur, voice=None, music=None, music_vol="0.18", loudnorm=True):
+    """Voice and/or music onto the picture. Music ducks under the voice and fades out; the mix is normalised (two-pass) to -14 LUFS."""
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-nostats", "-i", str(silent)]
+    graph = None
+    if voice and music:
+        cmd += ["-i", str(voice), "-stream_loop", "-1", "-i", str(music)]
+        graph = (f"[2:a]volume={music_vol},afade=t=out:st={max(0, dur - 2):.2f}:d=2[m];"
+                 "[m][1:a]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[md];"
+                 "[1:a][md]amix=inputs=2:duration=first:normalize=0")
+    elif voice:
+        cmd += ["-i", str(voice)]
+        graph = "[1:a]anull"
+    elif music:          # captions-and-music video: the track at full level, faded out at the end
+        cmd += ["-stream_loop", "-1", "-i", str(music)]
+        graph = f"[1:a]afade=t=out:st={max(0, dur - 2):.2f}:d=2"
+    tail = ["-c:v", "copy", "-t", f"{dur:.3f}", "-movflags", "+faststart", str(mp4)]
+    if graph is None:
+        subprocess.run(cmd + ["-loglevel", "error", "-an"] + tail, check=True)
+        return None
+    graph += f",apad,atrim=0:{dur:.3f}"
+    measured = None
+    if loudnorm:
+        log = subprocess.run(cmd + ["-filter_complex", graph + f",loudnorm={LOUD}:print_format=json[a]", "-map", "[a]", "-f", "null", "-"],
+                             capture_output=True, text=True).stderr
+        m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", log)
+        if m:
+            j = json.loads(m.group(0))
+            if "inf" not in j["input_i"]:
+                measured = j
+                graph += (f",loudnorm={LOUD}:measured_I={j['input_i']}:measured_TP={j['input_tp']}:measured_LRA={j['input_lra']}"
+                          f":measured_thresh={j['input_thresh']}:offset={j['target_offset']}:linear=true")
+    subprocess.run(cmd + ["-loglevel", "error", "-filter_complex", graph + ",aresample=48000[a]", "-map", "0:v", "-map", "[a]",
+                          "-c:a", "aac", "-b:a", "256k", "-ar", "48000"] + tail, check=True)
+    return measured
 
 
 def cmd_render(a):
@@ -424,40 +559,38 @@ def cmd_render(a):
     out.mkdir(parents=True)
     silent = out / "silent.mp4"
     matte = next(iter(sorted(p.glob("*matte*.mkv"))), None)
+    test = a.start is not None or a.end is not None
+    if matte and re.search(r"\bsplit\s*:\s*true", (p / "script.js").read_text(encoding="utf-8")):
+        print("NOTE: this script uses the split layout, which plays the footage in the page; the cut-out is not used for this render.")
+        matte = None
     if any(p.glob("presenter.*")) and matte:
         # presenter + cutout: graphics behind the person, the person, graphics in front
         dur, f0, f1, moves, backdrops = asyncio.run(frames_layered(p, out, a.fps, a.workers, a.start, a.end))
         composite(p, matte, out, silent, a.fps, f0, f1, a.crf, moves, backdrops)
-        if a.start is not None or a.end is not None:
-            test = p / "output" / f"{p.name}-test.mp4"
-            test.parent.mkdir(exist_ok=True)
-            shutil.copy(silent, test)
-            print(f"wrote {test} (test cut, no audio)")
-            return
     else:
-        dur = asyncio.run(frames(p, out, a.fps, a.workers))
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(a.fps), "-i", str(out / "%05d.png"),
-                        "-c:v", "libx264", "-preset", "slow", "-crf", str(a.crf), "-pix_fmt", "yuv420p",
-                        "-profile:v", "high", "-x264-params", "aq-mode=3", str(silent)], check=True)
+        if any(p.glob("presenter.*")) and re.search(r"\bmoves\s*:\s*\[\s*\{", (p / "script.js").read_text(encoding="utf-8")):
+            print("WARNING: script.js has presenter `moves`, but there is no cut-out (run tools/matte.py on the footage first).\n"
+                  "         The footage will not shrink or zoom; graphics sit on top of it.", file=sys.stderr)
+        dur, f0, f1 = asyncio.run(frames(p, out, a.fps, a.workers, a.start, a.end))
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(a.fps), "-start_number", str(f0), "-i", str(out / "%05d.png"),
+                        "-vf", TO_YUV, "-c:v", "libx264", "-preset", "slow", "-crf", str(a.crf), "-pix_fmt", "yuv420p",
+                        "-profile:v", "high", "-x264-params", "aq-mode=3", *BT709, str(silent)], check=True)
+    if test:
+        t = p / "output" / f"{p.name}-test.mp4"
+        t.parent.mkdir(exist_ok=True)
+        shutil.copy(silent, t)
+        print(f"wrote {t} (test cut {f0 / a.fps:.1f}-{f1 / a.fps:.1f}s, no audio)")
+        return
     mp4 = p / "output" / f"{p.name}-1080x1920.mp4"
     mp4.parent.mkdir(exist_ok=True)
     voice = p / "voice.mp3"
-    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(silent)]
-    if voice.exists():
-        cmd += ["-i", str(voice)]
-        if a.music:
-            # music under the voice, ducked whenever the voice speaks, faded out at the end
-            cmd += ["-stream_loop", "-1", "-i", a.music, "-filter_complex",
-                    f"[2:a]volume={a.music_vol},afade=t=out:st={max(0, dur - 2):.2f}:d=2[m];"
-                    "[m][1:a]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[md];"
-                    "[1:a][md]amix=inputs=2:duration=first:normalize=0[a]",
-                    "-map", "0:v", "-map", "[a]"]
-        else:
-            cmd += ["-map", "0:v", "-map", "1:a"]
-        cmd += ["-c:a", "aac", "-b:a", "256k"]
-    cmd += ["-c:v", "copy", "-t", f"{dur:.3f}", "-movflags", "+faststart", str(mp4)]
-    subprocess.run(cmd, check=True)
-    print(f"wrote {mp4}")
+    measured = mux_audio(silent, mp4, dur, voice if voice.exists() else None, a.music, a.music_vol, not a.no_loudnorm)
+    size = mp4.stat().st_size / 1e6
+    print(f"wrote {mp4}  ({dur:.1f}s, {size:.1f} MB, {size * 8 / dur:.1f} Mbps"
+          + (f", audio {measured['input_i']} -> -14 LUFS" if measured else ", no audio" if not (voice.exists() or a.music) else "") + ")")
+    cfg = load_config(p) or {}
+    if str((cfg.get("answers") or {}).get("ai_disclosure") or "").startswith("yes"):
+        print("REMINDER: this video has realistic AI-made content. Switch on the platform's AI label when you upload it.")
 
 
 # ---------- capture ----------
@@ -468,14 +601,7 @@ async def capture(p, url, find, name, height, width):
     shots.mkdir(exist_ok=True)
     k = 3  # device pixels per CSS pixel (device_scale_factor below)
     async with async_playwright() as pw:
-        browser = None
-        for ch in ("msedge", "chrome"):
-            try:
-                browser = await pw.chromium.launch(channel=ch)
-                break
-            except Exception:
-                pass
-        browser = browser or await pw.chromium.launch()
+        browser = await launch(pw, h264=True)
         ctx = await browser.new_context(
             viewport={"width": width, "height": 932}, device_scale_factor=k, locale="en-AU",
             user_agent="Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36 Edg/130.0")
@@ -581,21 +707,728 @@ def cmd_frames(a):
     print(f"grid sheet: {sheet_path}  (red lines = y in px of 1920; blue = x in px of 1080)")
 
 
+# ---------- brand ----------
+BRAND_JS = r"""() => {
+  const meta = n => (document.querySelector(`meta[property="${n}"],meta[name="${n}"]`) || {}).content || '';
+  const rgb = c => { const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[ ,\/]+/).map(parseFloat); return (p[3] === 0) ? null : p.slice(0, 3); };
+  const hexOf = p => '#' + p.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+  const hsl = ([r, g, b]) => { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    if (!d) return [0, 0, l]; const s = d / (1 - Math.abs(2 * l - 1)); let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [(h * 60 + 360) % 360, s, l]; };
+  const votes = {};
+  const vote = (c, w, why) => { const p = typeof c === 'string' && c[0] === '#' ? [1, 3, 5].map(i => parseInt(c.length === 4 ? c[(i + 1) / 2].repeat(2) : c.slice(i, i + 2), 16)) : rgb(c);
+    if (!p || p.some(isNaN)) return; const [h, s, l] = hsl(p); if (s < .25 || l < .12 || l > .85) return;      // greys, near-black and near-white are not brand colours
+    const k = hexOf(p); votes[k] = votes[k] || {hex: k, hue: h, w: 0, why: []}; votes[k].w += w; if (!votes[k].why.includes(why)) votes[k].why.push(why); };
+  vote(meta('theme-color'), 6, 'theme-color meta');
+  const root = getComputedStyle(document.documentElement);
+  for (const sheet of document.styleSheets) { let rules; try { rules = sheet.cssRules; } catch (e) { continue; }
+    for (const r of rules) if (r.selectorText && /^(:root|html|body)$/.test(r.selectorText.trim())) for (const name of r.style)
+      if (name.startsWith('--') && /primary|brand|accent|main|theme/i.test(name)) { const v = root.getPropertyValue(name).trim(); vote(/^#/.test(v) ? v : (v.startsWith('rgb') ? v : ''), 5, 'CSS variable ' + name); } }
+  const area = el => { const r = el.getBoundingClientRect(); return Math.min(4, Math.max(.5, r.width * r.height / 8000)); };
+  document.querySelectorAll('button, [class*="btn" i], [class*="button" i], [role="button"], input[type="submit"]').forEach(el => { const r = el.getBoundingClientRect(); if (r.width > 20 && r.height > 12) vote(getComputedStyle(el).backgroundColor, 3 * area(el), 'buttons'); });
+  document.querySelectorAll('header, nav, footer, [class*="hero" i], [class*="banner" i]').forEach(el => vote(getComputedStyle(el).backgroundColor, 2, 'header / hero background'));
+  [...document.querySelectorAll('a')].slice(0, 80).forEach(el => vote(getComputedStyle(el).color, .4, 'links'));
+  [...document.querySelectorAll('h1, h2')].slice(0, 12).forEach(el => vote(getComputedStyle(el).color, 1.5, 'headings'));
+  const ranked = Object.values(votes).sort((a, b) => b.w - a.w);
+  const accent = ranked[0] || null, far = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b)) >= 40;
+  const secondary = accent ? ranked.find(v => far(v.hue, accent.hue)) || null : null;
+  // logo: an image or SVG that calls itself a logo, else the first image inside the home link / header
+  const vis = el => { const r = el.getBoundingClientRect(); return r.width >= 24 && r.height >= 12 && r.width <= 700 && r.top < 1400 && getComputedStyle(el).visibility !== 'hidden'; };
+  const picks = ['img[src*="logo" i]', 'img[alt*="logo" i]', '[class*="logo" i] img', '[id*="logo" i] img', '[class*="logo" i] svg', '[id*="logo" i] svg', 'svg[class*="logo" i]',
+                 'header a[href="/"] img', 'header a[href="/"] svg', '[class*="brand" i] img', '[class*="brand" i] svg', 'header img', 'nav img'];
+  let logo = null, how = '';
+  for (const sel of picks) { const el = [...document.querySelectorAll(sel)].find(vis); if (el) { el.setAttribute('data-shorts-logo', '1'); logo = el.tagName; how = sel; break; } }
+  let bgUnder = null; if (logo) { for (let e = document.querySelector('[data-shorts-logo]'); e; e = e.parentElement) { const p = rgb(getComputedStyle(e).backgroundColor); if (p) { bgUnder = hexOf(p); break; } } }
+  const icon = [...document.querySelectorAll('link[rel~="apple-touch-icon"], link[rel~="icon"]')].map(l => ({href: l.href, size: parseInt((l.sizes && l.sizes.value) || '0') || (l.rel.includes('apple') ? 180 : 16)})).sort((a, b) => b.size - a.size)[0];
+  const socials = {}; document.querySelectorAll('a[href]').forEach(a => { const m = a.href.match(/(tiktok|instagram|youtube|facebook|linkedin|x|twitter)\.com\/(@?[\w.\-]+)/i);
+    if (m && !/^(share|sharer|intent|watch|p|reel)$/i.test(m[2])) socials[m[1].toLowerCase()] = socials[m[1].toLowerCase()] || m[2]; });
+  const fam = el => el ? getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g, '').trim() : '';
+  const name = meta('og:site_name') || (document.title || '').split(/\s[|–—\-:·]\s/)[0].trim();
+  return {name, title: document.title, description: meta('description') || meta('og:description'), ogImage: meta('og:image'), icon: icon && icon.href,
+          accent, secondary, ranked: ranked.slice(0, 6).map(v => ({hex: v.hex, weight: +v.w.toFixed(1), from: v.why})), logo, logoFrom: how, logoBackground: bgUnder, socials,
+          fonts: {heading: fam(document.querySelector('h1, h2')), body: fam(document.body)}, lang: document.documentElement.lang || ''};
+}"""
+
+
+def _lum(hexc):
+    r, g, b = [(v / 255 / 12.92) if v / 255 <= 0.03928 else ((v / 255 + 0.055) / 1.055) ** 2.4 for v in _hex(hexc)]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+async def brand_crawl(p, url):
+    """Read-only visit of a public page: name, description, logo, colours, fonts, social handles. Nothing is clicked or submitted."""
+    from playwright.async_api import async_playwright
+    out = p / "brand"
+    out.mkdir(exist_ok=True)
+    async with async_playwright() as pw:
+        browser = await launch(pw)
+        ctx = await browser.new_context(viewport={"width": 1366, "height": 900}, device_scale_factor=2)
+        pg = await ctx.new_page()
+        try:
+            await pg.goto(url, wait_until="networkidle", timeout=45000)
+        except Exception as e:
+            if pg.url in ("about:blank", "") or pg.url.startswith("chrome-error"):
+                await browser.close()
+                sys.exit("could not open %s (%s). Give the brand by hand instead:\n  python tools/shorts.py brand %s --name \"...\" --accent \"#hex\" --logo file.png"
+                         % (url, str(e).splitlines()[0][:120], p.name))
+        await pg.wait_for_timeout(800)
+        info = await pg.evaluate(BRAND_JS)
+        logo = None
+        if info["logo"]:
+            try:
+                el = pg.locator("[data-shorts-logo]").first
+                await el.screenshot(path=str(out / "logo.png"), omit_background=True)
+                logo = "brand/logo.png"
+            except Exception:
+                pass
+        if not logo:
+            for src in filter(None, [info.get("icon"), info.get("ogImage")]):
+                try:
+                    r = await ctx.request.get(src, timeout=20000)
+                    if r.ok and len(await r.body()) > 200:
+                        ext = (re.search(r"\.(png|jpe?g|svg|webp|ico)(?:\?|$)", src, re.I) or [None, "png"])[1].lower()
+                        (out / ("logo." + ext)).write_bytes(await r.body())
+                        logo, info["logoFrom"] = "brand/logo." + ext, "site icon" if src == info.get("icon") else "og:image"
+                        break
+                except Exception:
+                    pass
+        await pg.screenshot(path=str(out / "site.jpg"), type="jpeg", quality=70)
+        await browser.close()
+    info["logoFile"] = logo
+    return info
+
+
+def cmd_brand(a):
+    """Brand kit for a project: brand.js (used by the engine) and brand/brand.json (everything that was found, for the director)."""
+    p = proj(a.project)
+    info = {}
+    if a.url:
+        url = a.url if re.match(r"https?://|file:", a.url) else "https://" + a.url
+        info = asyncio.run(brand_crawl(p, url))
+        info["url"] = url
+    if a.clear:
+        for x in (p / "brand.js", p / "brand" / "brand.json"):
+            x.unlink(missing_ok=True)
+        print("brand removed: the project uses the clean neutral look")
+        return
+    old = {}
+    if (p / "brand" / "brand.json").exists() and not a.url:
+        old = json.loads((p / "brand" / "brand.json").read_text(encoding="utf-8"))
+    theme = dict(old.get("theme") or {})
+    if info.get("accent"):
+        theme["accent"] = info["accent"]["hex"]
+    if info.get("secondary"):
+        theme["secondary"] = info["secondary"]["hex"]
+    for k in ("accent", "secondary", "dark", "bg"):
+        v = getattr(a, k)
+        if v:
+            theme[k] = v if v.startswith("#") else "#" + v
+    if theme.get("accent") and "dark" not in theme:
+        r, g, b = _hex(theme["accent"])
+        theme["dark"] = "#%02x%02x%02x" % (int(r * 0.22), int(g * 0.22), int(b * 0.26))     # cards: a deep shade of the brand colour
+    logo = old.get("logo")
+    if info.get("logoFile"):
+        logo = info["logoFile"]
+    if a.logo:
+        src = pathlib.Path(a.logo)
+        (p / "brand").mkdir(exist_ok=True)
+        if src.resolve().parent != (p / "brand").resolve():
+            shutil.copy(src, p / "brand" / ("logo" + src.suffix.lower()))
+        logo = "brand/logo" + src.suffix.lower()
+    name = a.name or info.get("name") or old.get("name") or ""
+    socials = info.get("socials") or old.get("socials") or {}
+    handle = a.handle or old.get("handle") or next(("@" + h.lstrip("@") for k in ("tiktok", "instagram", "youtube") for h in [socials.get(k)] if h), "")
+    brand = {"name": name, "handle": handle, "url": info.get("url") or old.get("url") or "", "logo": logo, "theme": theme,
+             "description": info.get("description") or old.get("description") or "", "socials": socials,
+             "fonts": info.get("fonts") or old.get("fonts") or {}, "found": {k: info.get(k) for k in ("ranked", "logoFrom", "logoBackground", "title", "lang")} if info else old.get("found", {})}
+    if not (name or theme or logo):
+        sys.exit("nothing to save: give --url, or --name / --accent / --logo")
+    (p / "brand").mkdir(exist_ok=True)
+    (p / "brand" / "brand.json").write_text(json.dumps(brand, ensure_ascii=False, indent=2), encoding="utf-8")
+    (p / "brand.js").write_text("// written by tools/shorts.py brand: the brand this short is made for (details in brand/brand.json)\n"
+                                "window.BRAND = %s;\n" % json.dumps({k: brand[k] for k in ("name", "handle", "url", "logo", "theme")}, ensure_ascii=False, indent=2), encoding="utf-8")
+    cfg = load_config(p)
+    if cfg and brand["url"] and cfg["answers"].get("brand") in (None, "", "none"):
+        cfg["answers"]["brand"] = brand["url"]
+        save_config(p, cfg)
+    print("brand: %s%s" % (name or "(no name)", "  " + handle if handle else ""))
+    print("  logo    %s%s" % (logo or "none found (give one with --logo file.png)", ("  [from %s]" % info["logoFrom"]) if info.get("logoFile") else ""))
+    if logo and info.get("logoBackground") and _lum(info["logoBackground"]) < 0.2:
+        print("          the logo sits on a dark background on the site, so it is probably light: fine over backdrops, weak on the light look (use look: 'dark')")
+    print("  accent  %s%s" % (theme.get("accent", "none found: the clean look's blue is used (set one with --accent \"#hex\")"),
+                              ("  [from %s]" % ", ".join(info["accent"]["why"])) if info.get("accent") else ""))
+    if theme.get("secondary"):
+        print("  second  %s" % theme["secondary"])
+    for r_ in (info.get("ranked") or [])[1:4]:
+        print("  other   %s  (%s)" % (r_["hex"], ", ".join(r_["from"])))
+    if brand["description"]:
+        print("  about   %s" % brand["description"][:140])
+    if info:
+        print("  fonts   heading: %s, body: %s  (recorded only; the video keeps its own fonts unless you add the font files)" % (brand["fonts"].get("heading") or "?", brand["fonts"].get("body") or "?"))
+        print("  look at %s to confirm the colours match the site" % (p / "brand" / "site.jpg"))
+    print("wrote %s and brand/brand.json. script.js uses the brand unless it sets its own `look`." % (p / "brand.js"))
+
+
+# ---------- lint ----------
+LINT_JS = """async () => {
+  const st = document.getElementById('stage'), cs = getComputedStyle(st), px = v => parseFloat(cs.getPropertyValue(v)) || 0;
+  const safe = {top: px('--safe-top'), bottom: px('--safe-bottom'), left: px('--safe-left'), right: px('--safe-right')};
+  const k = st.getBoundingClientRect().width / 1080, o = st.getBoundingClientRect();
+  // the box of the text itself (a centred line in a full-width block must not count as touching the edges)
+  const R = el => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; const rg = document.createRange();
+    for (const n of el.childNodes) { if (n.nodeType !== 3 || !n.textContent.trim()) continue; rg.selectNodeContents(n);
+      for (const r of rg.getClientRects()) { x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top); x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom); } }
+    return {x: (x0 - o.left) / k, y: (y0 - o.top) / k, w: (x1 - x0) / k, h: (y1 - y0) / k}; };
+  const shown = el => { for (let e = el; e && e !== st; e = e.parentElement) { const c = getComputedStyle(e); if (c.visibility === 'hidden' || c.display === 'none' || +c.opacity < .05) return false; } return true; };
+  const leaves = root => [...root.querySelectorAll('*')].filter(e => shown(e) && ([...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) ));
+  const out = [];
+  for (const [i, sc] of window.SCENE_INFO.entries()) {
+    const el = document.querySelector(`[data-scene="${i}"]`), at = Math.max(sc.t + .05, Math.min(sc.end - .45, sc.t + 4));
+    TL.seek(at); await window.seekMedia(at);
+    const boxes = leaves(el).map(e => ({...R(e), text: e.textContent.trim().slice(0, 40)})).filter(b => b.w > 1 && b.h > 1);
+    const media = [...el.querySelectorAll('img,video')].map(m => ({src: (m.getAttribute('src') || '').split('/').pop(), ok: m.tagName === 'IMG' ? (m.complete && m.naturalWidth > 0) : (!m.error && m.readyState > 0)}));
+    // the other lane's elements on screen at this moment (for overlap)
+    const others = [...document.querySelectorAll('[data-scene]')].filter(x => x !== el && shown(x) && window.SCENE_INFO[+x.dataset.scene].lane !== sc.lane)
+      .map(x => ({scene: +x.dataset.scene, boxes: leaves(x).map(R).filter(b => b.w > 1 && b.h > 1)}));
+    out.push({i, at, boxes, media, others});
+  }
+  const bds = [...document.querySelectorAll('#bds img, #bds video, #pvideo')].filter(m => m.getAttribute('src')).map(m => ({src: m.getAttribute('src').split('/').pop(), ok: m.tagName === 'IMG' ? (m.complete && m.naturalWidth > 0) : (!m.error && m.readyState > 0)}));
+  const changes = [...new Set(TL.getChildren(false, true, false).filter(c => c.duration() > .05).map(c => Math.round(c.startTime() * 10) / 10))].sort((a, b) => a - b);
+  return {safe, changes, scenes: window.SCENE_INFO, probes: out, dur: window.DUR, errors: window.PAGE_ERRORS || [], media: bds,
+          script: {scenes: window.SCRIPT.scenes, captions: !!window.SCRIPT.captions, audio: window.SCRIPT.audio, presenter: window.SCRIPT.presenter, safe: window.SCRIPT.safe, hasWords: (window.WORDS || []).length, hasSegs: (window.SEGMENTS || []).length}};
+}"""
+CPS = 17            # reading speed, characters per second (Netflix subtitle limit for adults; used here as a proxy)
+MIN_HOLD = 0.85     # shortest time any text should stay up, seconds
+RAIL_TOP = 800      # the right-hand button column starts about here (y px); above it the right edge is free (inferred from the templates)
+MAX_GAP = 5.0       # longest stretch with nothing new on screen, seconds (practitioner convention: 2-4 s)
+
+
+def _length_range(text):
+    nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", str(text or ""))]
+    return (min(nums), max(nums)) if nums else None
+
+
+async def lint(p):
+    """Open the page, visit every scene and report what breaks the rules. Returns a list of {level, t, scene, type, rule, msg}."""
+    from playwright.async_api import async_playwright
+    cat = json.loads((TEMPLATE / "scenes.json").read_text(encoding="utf-8"))
+    found = []
+
+    def add(level, rule, msg, t=None, i=None, typ=None):
+        found.append({"level": level, "rule": rule, "t": None if t is None else round(t, 2), "scene": i, "type": typ, "msg": msg})
+
+    async with async_playwright() as pw:
+        browser, page = await open_page(pw, p / "short.html", any(p.glob("presenter.*")))
+        d = await page.evaluate(LINT_JS)
+        net = issues_of(page)
+        await browser.close()
+    for x in dict.fromkeys(net + d["errors"]):
+        add("error", "load", x)
+    for m in d["media"]:
+        if not m["ok"]:
+            add("error", "missing-file", "backdrop or footage did not load: %s" % m["src"])
+    safe, scenes, dur = d["safe"], d["scenes"], d["dur"]
+    W, H = 1080, 1920
+    FULL = {"broll", "hero", "web", "doc", "photo", "phone", "screen", "mindmap", "stickies", "tags", "orb", "orbit"}     # picture scenes: only frame cut-off is checked, not the safe zone
+    for sc, pr in zip(scenes, d["probes"]):
+        i, typ, t = pr["i"], sc["type"], sc["t"]
+        for m in pr["media"]:
+            if not m["ok"]:
+                add("error", "missing-file", "did not load: %s" % m["src"], t, i, typ)
+        cut = [b for b in pr["boxes"] if b["x"] < -2 or b["y"] < -2 or b["x"] + b["w"] > W + 2 or b["y"] + b["h"] > H + 2]
+        if cut and typ not in ("web", "doc", "mindmap", "screen", "phone"):     # these move a camera or a device through the frame on purpose
+            add("error", "cut-off", "text runs off the frame: “%s”" % cut[0]["text"], t, i, typ)
+        if typ not in FULL:
+            for b in pr["boxes"]:
+                side = ("top" if b["y"] < safe["top"] - 2 else "bottom" if b["y"] + b["h"] > H - safe["bottom"] + 2 else
+                        "left" if b["x"] < safe["left"] - 2 else
+                        "right" if b["x"] + b["w"] > W - safe["right"] + 2 and b["y"] + b["h"] > RAIL_TOP else None)
+                if side and not (b in cut):
+                    add("warn", "safe-zone", "“%s” sits in the %s unsafe area (app buttons / text cover it)" % (b["text"], side), t, i, typ)
+                    break
+        if sc["lane"] == "cap":
+            for o in pr["others"]:
+                hit = any(a["x"] < b["x"] + b["w"] - 6 and b["x"] < a["x"] + a["w"] - 6 and a["y"] < b["y"] + b["h"] - 6 and b["y"] < a["y"] + a["h"] - 6
+                          for a in pr["boxes"] for b in o["boxes"])
+                if hit:
+                    other = scenes[o["scene"]]
+                    add("error", "overlap", "caption “%s” sits on top of the %s scene's text (move it with pos:'top'|'mid'|'low' or shorten the scene)" % (sc["key"][:30], other["type"]), t, i, typ)
+        hold = sc["end"] - sc["t"]
+        if sc["lane"] == "cap":
+            chars = len(sc["key"]) + len(sc["lead"])
+            need = max(MIN_HOLD, chars / CPS)
+            if hold + 0.05 < need:
+                add("warn", "dwell", "caption is up for %.1fs but needs about %.1fs to read (%d characters)" % (hold, need, chars), t, i, typ)
+            if len(sc["key"].split()) > 5:
+                add("warn", "caption-length", "key line has %d words; keep it to 2-5" % len(sc["key"].split()), t, i, typ)
+            if len(sc["lead"].split()) > 7:
+                add("warn", "caption-length", "lead line has %d words; keep it to 3-6" % len(sc["lead"].split()), t, i, typ)
+        elif hold < 1.0 and typ != "hero":
+            add("warn", "dwell", "%s is on screen for only %.1fs" % (typ, hold), t, i, typ)
+    # script-level rules
+    raw = d["script"]["scenes"]
+    for n, sc in enumerate(raw):
+        spec = cat["scenes"].get(sc.get("type"))
+        if not spec:
+            add("error", "unknown-type", "scene %d has type '%s'; known types: %s" % (n, sc.get("type"), ", ".join(cat["scenes"])))
+            continue
+        for key in spec["required"]:
+            if sc.get(key) in (None, "", []):
+                add("error", "missing-field", "%s scene needs `%s`" % (sc["type"], key), sc.get("t"))
+        n_items = len(sc.get("items") or sc.get("points") or [])
+        limits = {"chart": 6, "compare": 3, "list": 5, "timeline": 5, "line": 8, "badges": 3, "pills": 6, "glass": 5, "stickies": 5, "tags": 3}
+        if n_items > limits.get(sc["type"], 99):
+            add("warn", "too-much", "%s has %d items; more than %d does not read on a phone" % (sc["type"], n_items, limits[sc["type"]]), sc.get("t"))
+        if sc["type"] == "chart" and not sc.get("note"):
+            add("warn", "source", "chart has no `note` naming where the numbers come from", sc.get("t"))
+    starts = sorted({s_["t"] for s_ in scenes})
+    if not starts or starts[0] > 0.1:
+        add("warn", "hook", "nothing is on screen at 0.0s; the hook must be there from the first frame")
+    WORDY = {"kinetic", "phone", "stickies", "bignum"}       # scenes whose own words can be the hook
+    if not any((s_["lane"] == "cap" or s_["type"] in WORDY) and s_["t"] <= 1.5 for s_ in scenes) and not d["script"].get("captions"):
+        add("warn", "hook", "no caption, title or headline scene in the first 1.5s")
+    moves_ = [c for c in d["changes"] if c < dur - 0.3]       # every moment something starts moving (rows, bars, words)
+    for a_, b_ in zip(moves_, moves_[1:] + [dur]):
+        if b_ - a_ > MAX_GAP + 0.01:
+            add("warn", "pacing", "nothing new on screen for %.1fs (aim for a change every 2-4s)" % (b_ - a_), a_)
+    vis = sorted((s_ for s_ in scenes if s_["lane"] == "vis"), key=lambda s_: s_["t"])
+    for a_, b_ in zip(vis, vis[1:]):
+        if a_["type"] == b_["type"] and a_["type"] not in ("broll", "photo", "kinetic", "orb", "screen"):
+            add("warn", "variety", "two %s scenes in a row" % a_["type"], b_["t"])
+    if vis and not (vis[-1]["type"] in ("cta", "kinetic") and dur - vis[-1]["t"] <= 6):
+        add("warn", "ending", "the video does not end on a `cta` (one clear action) or a closing `kinetic` line in the last 3-4s")
+    cfg = load_config(p)
+    if cfg is None or cfg.get("status") != "ready":
+        add("warn", "config", "project setup is not finished: python tools/shorts.py config %s --interactive" % p.name)
+    else:
+        ans = cfg["answers"]
+        rng = _length_range(ans.get("length_seconds"))
+        if rng and not (rng[0] - 2 <= dur <= rng[1] + 2):
+            add("warn", "length", "video is %.1fs; the project asked for %s s" % (dur, ans.get("length_seconds")))
+        want = "strict" if str(ans.get("safe_zone", "")).startswith("paid") else "organic"
+        if (d["script"]["safe"] or "organic") != want:
+            add("warn", "safe-zone", "config says '%s' but script.js has safe: '%s'" % (ans.get("safe_zone"), d["script"]["safe"] or "organic"))
+        if str(ans.get("ai_disclosure") or "").startswith("yes"):
+            add("info", "ai-label", "realistic AI-made content: switch on the platform's AI label when uploading")
+    return found, {"duration": round(dur, 2), "scenes": len(scenes), "safe": safe}
+
+
+def cmd_lint(a):
+    p = proj(a.project)
+    found, meta = asyncio.run(lint(p))
+    errors = sum(x["level"] == "error" for x in found)
+    warns = sum(x["level"] == "warn" for x in found)
+    if a.json:
+        print(json.dumps({"project": p.name, **meta, "errors": errors, "warnings": warns, "problems": found}, ensure_ascii=False, indent=2))
+    else:
+        for x in sorted(found, key=lambda x: ({"error": 0, "warn": 1, "info": 2}[x["level"]], x["t"] or 0)):
+            where = ("%6.2fs " % x["t"]) if x["t"] is not None else "        "
+            print("%-5s %s%-14s %s" % (x["level"].upper(), where, x["rule"], x["msg"]))
+        print("%s: %.1fs, %d scenes, %d errors, %d warnings" % (p.name, meta["duration"], meta["scenes"], errors, warns))
+    if errors or (a.strict and warns):
+        sys.exit(1)
+
+
+# ---------- word timings ----------
+def _words_from_chars(chars, starts, ends):
+    words, cur, s0, e0 = [], "", None, None
+    for c, s, e in zip(chars, starts, ends):
+        if c.isspace():
+            if cur:
+                words.append({"w": cur, "s": round(s0, 3), "e": round(e0, 3)})
+            cur, s0 = "", None
+        else:
+            cur += c
+            s0 = s if s0 is None else s0
+            e0 = e
+    if cur:
+        words.append({"w": cur, "s": round(s0, 3), "e": round(e0, 3)})
+    return words
+
+
+def _stamp(x):
+    h_, m, s = x.replace(",", ".").split(":")[-3:] if x.count(":") == 2 else ["0"] + x.replace(",", ".").split(":")
+    return int(h_) * 3600 + int(m) * 60 + float(s)
+
+
+def parse_words(path):
+    """Word timings from: a JSON list / {"words": [...]} with (w|word|text, s|start, e|end); an ElevenLabs alignment
+    (characters + character_start_times_seconds); Whisper JSON (segments[].words[]); or .srt / .vtt (words spread evenly in each cue)."""
+    path = pathlib.Path(path)
+    raw = path.read_text(encoding="utf-8-sig")
+    if path.suffix.lower() in (".srt", ".vtt"):
+        words = []
+        for m in re.finditer(r"([\d:.,]+)\s*-->\s*([\d:.,]+)[^\n]*\n((?:.+\n?)+)", raw):
+            s, e = _stamp(m.group(1)), _stamp(m.group(2))
+            toks = re.sub(r"<[^>]+>", "", m.group(3)).split()
+            total = sum(len(t) for t in toks) or 1
+            at = s
+            for t in toks:
+                d = (e - s) * len(t) / total
+                words.append({"w": t, "s": round(at, 3), "e": round(at + d, 3)})
+                at += d
+        return words, "approximate (spread across each subtitle cue)"
+    j = json.loads(raw)
+    al = j.get("alignment") or j.get("normalized_alignment") or j if isinstance(j, dict) else None
+    if isinstance(al, dict) and "characters" in al and "character_start_times_seconds" in al:
+        return _words_from_chars(al["characters"], al["character_start_times_seconds"], al["character_end_times_seconds"]), "character timings"
+    items = j if isinstance(j, list) else j.get("words") or [w for seg in j.get("segments", []) for w in seg.get("words", [])]
+    words = []
+    for w in items:
+        text = str(w.get("w") or w.get("word") or w.get("text") or "").strip()
+        s, e = w.get("s", w.get("start")), w.get("e", w.get("end"))
+        if text and s is not None:
+            words.append({"w": text, "s": round(float(s), 3), "e": round(float(e if e is not None else s + 0.3), 3)})
+    return words, "word timings"
+
+
+def _multipart(fields, files):
+    b = uuid.uuid4().hex
+    body = b""
+    for k, v in fields.items():
+        body += ("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n" % (b, k, v)).encode()
+    for k, (name, data, ctype) in files.items():
+        body += ("--%s\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\nContent-Type: %s\r\n\r\n" % (b, k, name, ctype)).encode() + data + b"\r\n"
+    return body + ("--%s--\r\n" % b).encode(), "multipart/form-data; boundary=" + b
+
+
+def _eleven(url, data, ctype):
+    key = os.environ.get("ELEVENLABS_API_KEY") or sys.exit("ELEVENLABS_API_KEY is not set in the environment (never put the key in a command or a file)")
+    req = urllib.request.Request(url, data=data, method="POST", headers={"xi-api-key": key, "Content-Type": ctype})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        sys.exit("ElevenLabs refused the request (HTTP %d): %s" % (e.code, e.read().decode()[:300]))
+
+
+def write_words(p, words, how):
+    (p / "words.js").write_text("// written by tools/shorts.py align: every spoken word {w, s: start, e: end} in seconds (%s)\n"
+                                "window.WORDS = %s;\n" % (how, json.dumps(words, ensure_ascii=False)), encoding="utf-8")
+    print("%d words -> %s  (%s)" % (len(words), p / "words.js", how))
+    print("  " + "  ".join("%s@%.2f" % (w["w"], w["s"]) for w in words[:12]) + (" ..." if len(words) > 12 else ""))
+    print("use them in script.js:  { word: 'visa', type: ... } starts a scene when the word is said;  syncWords: true pops caption words in time")
+
+
+def cmd_align(a):
+    p = proj(a.project)
+    voice = p / "voice.mp3"
+    if a.source:
+        words, how = parse_words(a.source)
+        if not words:
+            sys.exit("no word timings found in %s" % a.source)
+        return write_words(p, words, how + ", from " + pathlib.Path(a.source).name)
+    if not voice.exists():
+        sys.exit(f"put the voiceover at {voice}")
+    engine = a.engine
+    if engine == "auto":
+        try:
+            import faster_whisper  # noqa: F401
+            engine = "whisper"
+        except ImportError:
+            engine = "elevenlabs" if os.environ.get("ELEVENLABS_API_KEY") and a.text else None
+    if engine == "whisper":
+        from faster_whisper import WhisperModel
+        segs, _ = WhisperModel(a.model, compute_type="int8").transcribe(str(voice), word_timestamps=True, language=a.language)
+        words = [{"w": w.word.strip(), "s": round(w.start, 3), "e": round(w.end, 3)} for sg in segs for w in sg.words if w.word.strip()]
+        return write_words(p, words, "speech recognition, faster-whisper %s; check the spelling of names and numbers" % a.model)
+    if engine == "elevenlabs":
+        if not a.text:
+            sys.exit("--text <file with the exact words spoken> is needed for ElevenLabs forced alignment")
+        body, ctype = _multipart({"text": pathlib.Path(a.text).read_text(encoding="utf-8")}, {"file": ("voice.mp3", voice.read_bytes(), "audio/mpeg")})
+        j = _eleven("https://api.elevenlabs.io/v1/forced-alignment", body, ctype)
+        words = [{"w": w["text"].strip(), "s": round(float(w["start"]), 3), "e": round(float(w["end"]), 3)} for w in j.get("words", []) if w.get("text", "").strip()]
+        if not words:
+            sys.exit("ElevenLabs returned no words; the response keys were: %s" % ", ".join(j))
+        return write_words(p, words, "ElevenLabs forced alignment")
+    sys.exit("no way to time the words on this machine. Any ONE of these works:\n"
+             "  - give timings you already have:   align %s --from words.json   (or .srt / .vtt, or the JSON any speech tool returns)\n"
+             "  - pip install faster-whisper        (local, free; downloads a model once)\n"
+             "  - set ELEVENLABS_API_KEY and pass   --text script.txt\n"
+             "Word timings are optional: `segments` alone is enough to build a short." % p.name)
+
+
+def cmd_voice(a):
+    """Optional: make voice.mp3 from a script with ElevenLabs, and words.js from the timings it returns."""
+    p = proj(a.project)
+    text = pathlib.Path(a.text).read_text(encoding="utf-8").strip()
+    if (p / "voice.mp3").exists() and not a.force:
+        sys.exit("voice.mp3 already exists; --force replaces it (and spends credits again)")
+    body = json.dumps({"text": text, "model_id": a.model_id}).encode()
+    j = _eleven("https://api.elevenlabs.io/v1/text-to-speech/%s/with-timestamps?output_format=mp3_44100_128" % a.voice_id, body, "application/json")
+    (p / "voice.mp3").write_bytes(base64.b64decode(j["audio_base64"]))
+    print("wrote %s (%.1fs)" % (p / "voice.mp3", duration(p / "voice.mp3")))
+    al = j.get("alignment") or j.get("normalized_alignment")
+    if al:
+        write_words(p, _words_from_chars(al["characters"], al["character_start_times_seconds"], al["character_end_times_seconds"]), "ElevenLabs timestamps")
+    a.noise, a.min_pause = "-35", 0.35
+    cmd_segments(a)
+
+
+# ---------- plan: the director's first pass (content -> beats -> a design for each) ----------
+STOP = set("a an the and or but so if then than that this these those is are was were be been being am do does did have has had i you he she it we they me my your our their them his her its of to in on at for with by from as about into over after before up down out off not no yes just very really can could will would should may might must there here what which who whom when where why how all any some each every both few more most other such only own same too also get got make made let like one two".split())
+ROLES = [   # (role, pattern) checked in order; the first match names the beat
+    ("cta",        r"\b(comment|follow|subscribe|link in (the )?bio|dm me|send (it|you)|download|sign up|book a|click|tap the|share this|save this)\b"),
+    ("example",    r"\b(for example|for instance|let'?s say|imagine|picture this|suppose|here'?s an example)\b"),
+    ("steps",      r"\b(first(ly)?,|second(ly)?,|third(ly)?,|step (one|two|three|\d)|next,|then you|finally|lastly)"),
+    ("definition", r"\b(it'?s called|is called|are called|known as|what is|what really is|means that|stands for|think of it (like|as))\b"),
+    ("compare",    r"\b(versus|vs\.?|compared (to|with)|instead of|rather than|better than|worse than|more than|less than|on the other hand|whereas)\b"),
+    ("problem",    r"\b(the reason|the problem|that'?s why|because|struggl\w*|mistake|fail\w*|confus\w*|swipe away|churn|lose|losing|hard to)\b"),
+    ("payoff",     r"\b(if you do this|you will|you'?ll|will go (way )?up|so that|which means|the result|that'?s how)\b"),
+    ("list",       r"(\b\w+, \w+(,| and| or) \w+)"),
+]
+NUM = r"(\$?\d[\d,.]*(?:\s?(?:%|percent\b|x\b|k\b|million\b|billion\b|times\b|seconds?\b|minutes?\b|hours?\b|days?\b|weeks?\b|months?\b|years?\b))?|\b(two|three|four|five|six|seven|eight|nine|ten) (times|x|steps|ways|things|principles|rules|reasons|tips)\b)"
+DESIGNS = {   # role -> scene per format: (type, layout, why)
+    "data explainer": {"hook": ("title", "full", "the hook as two bold lines from the first frame"), "number": ("bignum", "full", "one number carries the point; add the source as a badge"),
+                       "definition": ("kinetic", "full", "name the idea in two to four big words"), "problem": ("stamp", "full", "a verdict or the pain, slammed on screen"),
+                       "example": ("quote", "full", "show the example sentence and highlight the phrase"), "steps": ("list", "full", "one row per step, each on its spoken beat"),
+                       "list": ("pills", "full", "the items as pills"), "compare": ("compare", "full", "stacked rows, winner outlined"), "payoff": ("stat", "full", "the outcome as one line on a card"),
+                       "cta": ("cta", "full", "one clear action, held to the last frame"), "point": ("cap", "full", "bold caption over the backdrop")},
+    "product film":   {"hook": ("phone", "full", "open on the product in the hand: 3D phone with cards flying in"), "number": ("orb", "full", "chip with the number beside the orb"),
+                       "definition": ("kinetic", "full", "two-tone big type"), "problem": ("kinetic", "full", "the pain as a question, light background"),
+                       "example": ("screen", "full", "the real screen, tilted and zooming to the detail"), "steps": ("glass", "full", "glass checklist"), "list": ("glass", "full", "glass checklist"),
+                       "compare": ("kinetic", "full", "before line, then the after line on a new background"), "payoff": ("kinetic", "full", "glow line on the dark background"),
+                       "cta": ("kinetic", "full", "three words or fewer, back on white"), "point": ("kinetic", "full", "two to four words")},
+    "creator explainer": {"hook": ("headline", "full", "serif headline above the head; the face carries the hook"), "number": ("tags", "full", "the figure in an oval beside the head"),
+                       "definition": ("mindmap", "panel", "start the map: the idea in the middle"), "problem": ("stickies", "full", "the messy version as sticky notes"),
+                       "example": ("headline", "full", "the example typed on above the head"), "steps": ("mindmap", "panel", "one node per step, camera follows"), "list": ("tags", "full", "one oval per item as it is said"),
+                       "compare": ("mindmap", "panel", "two branches side by side"), "payoff": ("mindmap", "panel", "zoom out on the whole map, glow each part"),
+                       "cta": ("cta", "full", "one clear action"), "point": ("presenter", "full", "stay on the face; captions only")},
+    "split explainer": {"hook": ("orbit", "split", "examples circling the idea, the name lands in the middle; title on top"), "number": ("bignum", "split", "the number on the panel"),
+                       "definition": ("skeleton", "split", "a script page with the line highlighted and a callout naming it"), "problem": ("line", "split", "what goes wrong, as a curve (only with real data) or a phone example"),
+                       "example": ("skeleton", "split", "the real sentences typed on, each marked, then bracketed and named"), "steps": ("picklist", "split", "numbered pills"), "list": ("picklist", "split", "numbered pills, the one that matters in focus"),
+                       "compare": ("compare", "split", "stacked rows on the panel"), "payoff": ("presenter", "full", "back to the face for the promise"),
+                       "cta": ("cta", "full", "the face, one action, a quoted keyword if there is one"), "point": ("presenter", "full", "full-screen presenter with one-word captions")},
+    "story b-roll":   {"hook": ("broll", "full", "the most striking clip first"), "point": ("broll", "full", "one clip per sentence"), "cta": ("cta", "full", "one clear action"),
+                       "example": ("screen", "full", "the screen recording"), "steps": ("screen", "full", "the screen recording, zoomed to the click"), "number": ("bignum", "full", "the number over the clip")},
+}
+LENGTHS = {"data explainer": (20, 45), "product film": (12, 20), "creator explainer": (30, 60), "split explainer": (45, 90), "story b-roll": (30, 90)}
+
+
+def _keywords(sent, n=3):
+    m = re.search(r"(?:called|known as)\s+(?:the\s+)?[\"“']?([\w' -]{3,30}?)[\"”']?(?:[.,!?]|$| method| hack| rule)", sent, re.I)
+    if m:
+        return m.group(1).strip()
+    q = re.search(r"[\"“]([^\"”]{3,40})[\"”]", sent)
+    if q:
+        return q.group(1)
+    words = [w for w in re.findall(r"[A-Za-z0-9$%'-]+", sent) if w.lower() not in STOP and len(w) > 2]
+    words.sort(key=lambda w: (-(w[0].isupper() and sent.find(w) > 0), -len(w)))
+    keep = set(words[:n])
+    return " ".join(w for w in re.findall(r"[A-Za-z0-9$%'-]+", sent) if w in keep)[:40]
+
+
+def cmd_plan(a):
+    """Read the script (or transcript), cut it into beats, name each beat's job and pick a design for it. Writes plan.json."""
+    p = proj(a.project)
+    cfg = (load_config(p) or {}).get("answers", {})
+    words = []
+    if (p / "words.js").exists():
+        m = re.search(r"window\.WORDS\s*=\s*(\[.*\]);", (p / "words.js").read_text(encoding="utf-8"), re.S)
+        words = json.loads(m.group(1)) if m else []
+    if a.text:
+        text = pathlib.Path(a.text).read_text(encoding="utf-8")
+    elif (p / "script.txt").exists():
+        text = (p / "script.txt").read_text(encoding="utf-8")
+    elif words:
+        text = " ".join(w["w"] for w in words)
+    else:
+        sys.exit("give the words: --text script.txt, or projects/%s/script.txt, or run `align` first" % p.name)
+    sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", text)) if x.strip()]
+    presenter = any(p.glob("presenter.*")) or str(cfg.get("presenter") or "").startswith("yes")
+    has_voice = (p / "voice.mp3").exists() or presenter or not str(cfg.get("voice_source") or "").startswith("no voice")
+    # timing: real word times when there are any, else an estimate at 160 words a minute
+    counts = [len(x.split()) for x in sents]
+    spans, k, t = [], 0, 0.0
+    timed = bool(words) and abs(len(words) - sum(counts)) <= max(3, 0.08 * sum(counts))
+    for c in counts:
+        if timed:
+            ws = words[k:k + c] or words[-1:]
+            spans.append((ws[0]["s"], ws[-1]["e"]))
+            k += c
+        else:
+            spans.append((round(t, 2), round(t + c / 3.0, 2)))
+            t += c / 3.0 + 0.2
+    total = spans[-1][1] + 0.5
+    fmt = a.format if a.format != "auto" else next((f for f in DESIGNS if str(cfg.get("format") or "").startswith(f)), None)
+    why_fmt = "asked for" if fmt else ""
+    if not fmt:
+        if not has_voice:
+            fmt, why_fmt = "product film", "no voice: type and motion carry it"
+        elif presenter:
+            fmt, why_fmt = ("split explainer", "a presenter and %.0f s of teaching: the panel keeps a diagram on screen while the face stays visible" % total) if total > 40 else ("creator explainer", "a presenter and a short script: graphics above the head")
+        else:
+            fmt, why_fmt = "data explainer", "voice without a presenter: captions, numbers and sources"
+    table = DESIGNS[fmt]
+    beats = []
+    for i, (sent, (s0, s1)) in enumerate(zip(sents, spans)):
+        low = sent.lower()
+        role = "hook" if s0 < 2.0 and i < 2 else next((r for r, pat in ROLES if re.search(pat, low)), None)
+        if role in (None, "list", "problem", "payoff") and re.search(NUM, low) and not re.search(r"\b(one|two) (of|thing)\b", low):
+            role = "number" if role is None else role
+        role = role or "point"
+        if role == "cta" and s0 < total * 0.6:
+            role = "point"                              # a call to action only counts near the end
+        typ, layout, why = table.get(role) or table.get("point") or ("cap", "full", "bold caption")
+        num = re.search(NUM, sent, re.I)
+        beats.append({"n": i, "t": round(s0, 2), "end": round(s1, 2), "role": role, "say": sent, "scene": typ, "layout": layout, "why": why,
+                      "key": (num.group(0).strip() if role == "number" and num else _keywords(sent)), "words": len(sent.split())})
+    # merge neighbours that would repeat the same full-screen presenter beat; note where a long beat needs a second change
+    notes = []
+    lo, hi = LENGTHS[fmt]
+    if not lo - 3 <= total <= hi + 5:
+        notes.append("length %.0f s is outside the usual %d-%d s for a %s: %s" % (total, lo, hi, fmt, "cut lines" if total > hi else "fine if the idea is complete"))
+    if beats[0]["end"] - beats[0]["t"] > 4:
+        notes.append("the hook takes %.1f s to say: put its key words on screen in the first frame" % (beats[0]["end"] - beats[0]["t"]))
+    if not any(b["role"] == "cta" for b in beats):
+        notes.append("no call to action found near the end: add one line and a `cta` scene")
+    for b in beats:
+        if b["end"] - b["t"] > 5:
+            b["note"] = "%.1f s on one beat: build it in two or three steps (rows, marks, a second scene) so something changes every 2-4 s" % (b["end"] - b["t"])
+        if b["words"] > 28:
+            b["note"] = (b.get("note", "") + " Long sentence: consider splitting it, or follow it with a simpler repeat line.").strip()
+    if any(b["scene"] in ("chart", "line", "bignum", "stat", "ring") for b in beats):
+        notes.append("number scenes need real figures with a source; if the script gives none, use a different scene")
+    runs = [b for a_, b in zip(beats, beats[1:]) if a_["scene"] == b["scene"] and b["scene"] not in ("presenter", "kinetic", "broll", "cap", "mindmap")]
+    for b in runs:
+        b["note"] = (b.get("note", "") + " Same scene type as the beat before: make it one scene that keeps building, or vary it.").strip()
+    script_keys = {"data explainer": {}, "product film": {"audio": None, "backdrops": "style: white -> sky -> night -> white, changing with the story"},
+                   "creator explainer": {"captions": {"style": "pill"}}, "split explainer": {"captions": {"style": "word", "pos": "split"}},
+                   "story b-roll": {"captions": {"style": "outline"}}}[fmt]
+    plan = {"project": p.name, "format": fmt, "format_reason": why_fmt, "duration": round(total, 1), "timing": "word times from words.js" if timed else "estimated at about 170 words a minute (run `align` for real times)",
+            "script_keys": script_keys, "notes": notes, "beats": beats}
+    (p / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    if a.json:
+        print(json.dumps(plan, ensure_ascii=False, indent=2))
+        return
+    print("format: %s  (%s)\nlength: %.0f s, %d beats, timing %s" % (fmt, why_fmt, total, len(beats), plan["timing"]))
+    if script_keys:
+        print("script.js: " + json.dumps(script_keys, ensure_ascii=False))
+    print()
+    for b in beats:
+        print("%5.1f-%5.1f  %-10s %-9s %-5s  key: %s" % (b["t"], b["end"], b["role"], b["scene"], b["layout"], b["key"]))
+        print("             “%s”" % (b["say"] if len(b["say"]) < 110 else b["say"][:107] + "..."))
+        print("             why: %s%s" % (b["why"], ("\n             NOTE: " + b["note"]) if b.get("note") else ""))
+    for n_ in notes:
+        print("NOTE: " + n_)
+    print("\nwrote %s. This is a first pass by rule: read every beat, change what does not fit, then write script.js." % (p / "plan.json"))
+
+
+# ---------- guide / doctor: for any person or AI model working from a shell ----------
+def cmd_guide(a):
+    cat = json.loads((TEMPLATE / "scenes.json").read_text(encoding="utf-8"))
+    if a.json:
+        cat["config_questions"] = [{"key": k, "question": q, "choices": c, "default": d} for k, q, c, d in CONFIG_QUESTIONS]
+        cat["commands"] = [ln.strip() for ln in __doc__.splitlines() if ln.strip().startswith("python tools/shorts.py")]
+        print(json.dumps(cat, ensure_ascii=False, indent=2))
+        return
+    print((TEMPLATE / "DIRECTOR.md").read_text(encoding="utf-8"))
+    print("\n## Scene types (templates/shorts/scenes.json)\n")
+    for name, sp in cat["scenes"].items():
+        fields = ", ".join(sp["required"] + ["[%s]" % o for o in sp["optional"]])
+        print("- %-9s %s\n            { %s }%s%s" % (name, sp["use"], fields,
+              ("\n            item: { %s }" % ", ".join(sp["item"])) if sp.get("item") else "", ("\n            " + sp["notes"]) if sp.get("notes") else ""))
+    print("\n## Formats (pick with the person; mix scenes freely)\n")
+    for k, v in cat.get("formats", {}).items():
+        print("- %-18s %s" % (k, v))
+    print("\n## script.js keys\n")
+    for k, v in cat["script_keys"].items():
+        print("- %-16s %s" % (k, v))
+    print("\n## Timing\n")
+    for k, v in cat["timing"].items():
+        print("- %-8s %s" % (k, v))
+    print("\n## Commands\n\n" + "\n".join(ln for ln in __doc__.splitlines() if ln.strip().startswith(("python tools/shorts.py", "#"))))
+
+
+def cmd_doctor(a):
+    rows = []
+
+    def row(name, ok, detail, need="needed"):
+        rows.append((name, ok, detail, need))
+
+    for tool in ("ffmpeg", "ffprobe"):
+        row(tool, bool(shutil.which(tool)), shutil.which(tool) or "not on PATH", "needed")
+    try:
+        import playwright  # noqa: F401
+        from playwright.async_api import async_playwright
+
+        async def probe():
+            async with async_playwright() as pw:
+                b = await launch(pw)
+                v = b.version
+                await b.close()
+                return v
+        row("browser", True, "Chromium " + asyncio.run(probe()))
+    except SystemExit as e:
+        row("browser", False, str(e).splitlines()[0])
+    except ImportError:
+        row("browser", False, "pip install playwright  then  python -m playwright install chromium")
+    try:
+        import PIL, numpy  # noqa: F401,E401
+        row("Pillow + numpy", True, "contact sheets, free backdrops")
+    except ImportError as e:
+        row("Pillow + numpy", False, "pip install -r requirements.txt (%s)" % e.name)
+    v = TEMPLATE / "vendor"
+    row("offline assets", (v / "gsap.min.js").exists() and (v / "fonts.css").exists(), "GSAP and fonts in templates/shorts/vendor" if (v / "gsap.min.js").exists() else "missing: renders will need the network")
+    h264 = bool(shutil.which("google-chrome") or shutil.which("microsoft-edge") or shutil.which("msedge"))
+    row("H.264 browser", h264, "Chrome/Edge found: presenter footage plays in the page" if h264 else "only needed for presenter .mp4 WITHOUT a cut-out (or convert the clip to .webm)", "optional")
+    models = sorted((ROOT / "tools" / "models").glob("rvm_*.onnx"))
+    try:
+        import onnxruntime, cv2  # noqa: F401,E401
+        deps = True
+    except ImportError:
+        deps = False
+    row("presenter cut-out", bool(models) and deps, (models[0].name if models else "no model in tools/models (see templates/shorts/README.md)") + ("" if deps else "; pip install onnxruntime opencv-python"), "optional")
+    try:
+        import faster_whisper  # noqa: F401
+        row("word timings (local)", True, "faster-whisper", "optional")
+    except ImportError:
+        row("word timings (local)", False, "pip install faster-whisper, or pass timings with align --from", "optional")
+    row("ElevenLabs key", bool(os.environ.get("ELEVENLABS_API_KEY")), "ELEVENLABS_API_KEY is set" if os.environ.get("ELEVENLABS_API_KEY") else "not set: bring your own voice.mp3", "optional")
+    bad = False
+    for name, ok, detail, need in rows:
+        print("%-4s %-22s %s%s" % ("ok" if ok else ("MISS" if need == "needed" else "-"), name, detail, "" if ok or need == "needed" else "  (optional)"))
+        bad = bad or (not ok and need == "needed")
+    print("\nready to make shorts" if not bad else "\nfix the MISS lines first")
+    if bad:
+        sys.exit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    n = sub.add_parser("new"); n.add_argument("name"); n.add_argument("--voice"); n.add_argument("--presenter")
+    n = sub.add_parser("new", help="create projects/<name>/ from the template"); n.add_argument("name"); n.add_argument("--voice"); n.add_argument("--presenter")
     n.add_argument("--noise", default="-35"); n.add_argument("--min-pause", type=float, default=0.35)
     s = sub.add_parser("segments"); s.add_argument("project")
     s.add_argument("--noise", default="-35", help="silence threshold in dB (default -35)")
     s.add_argument("--min-pause", type=float, default=0.35, help="shortest pause that splits lines, seconds")
-    q = sub.add_parser("sheet"); q.add_argument("project")
+    q = sub.add_parser("sheet", help="QA contact sheet"); q.add_argument("project")
+    q.add_argument("--no-guides", action="store_true", help="leave the safe-zone bands off the sheet")
+    li = sub.add_parser("lint", help="check the rules before rendering"); li.add_argument("project")
+    li.add_argument("--json", action="store_true", help="machine-readable output"); li.add_argument("--strict", action="store_true", help="warnings also fail")
+    al = sub.add_parser("align", help="word timings -> words.js"); al.add_argument("project")
+    al.add_argument("--from", dest="source", help="timings you already have: JSON, .srt or .vtt")
+    al.add_argument("--text", help="file with the exact spoken words (ElevenLabs forced alignment)")
+    al.add_argument("--engine", choices=["auto", "whisper", "elevenlabs"], default="auto")
+    al.add_argument("--model", default="small", help="faster-whisper model (default small)"); al.add_argument("--language", help="e.g. en, ne")
+    vo = sub.add_parser("voice", help="optional: ElevenLabs voiceover + word timings"); vo.add_argument("project")
+    vo.add_argument("--text", required=True); vo.add_argument("--voice-id", default="IKne3meq5aSn9XLyUdCD"); vo.add_argument("--model-id", default="eleven_multilingual_v2")
+    vo.add_argument("--force", action="store_true")
+    br = sub.add_parser("brand", help="brand kit: name, logo and colours from a website or by hand"); br.add_argument("project")
+    br.add_argument("--url", help="the brand's public website (read only)"); br.add_argument("--name"); br.add_argument("--handle", help="e.g. @acme")
+    br.add_argument("--accent", help="main brand colour, #hex"); br.add_argument("--secondary"); br.add_argument("--dark", help="colour of the dark cards, #hex"); br.add_argument("--bg")
+    br.add_argument("--logo", help="logo file (transparent PNG or SVG is best)"); br.add_argument("--clear", action="store_true", help="remove the brand (back to the clean look)")
+    pl = sub.add_parser("plan", help="first-pass storyboard from the script: beats, their job, a design for each"); pl.add_argument("project")
+    pl.add_argument("--text", help="the script or transcript (default: script.txt in the project, else words.js)")
+    pl.add_argument("--format", default="auto", choices=["auto"] + list(DESIGNS)); pl.add_argument("--json", action="store_true")
+    gd = sub.add_parser("guide", help="the brief, scene types and commands"); gd.add_argument("--json", action="store_true")
+    sub.add_parser("doctor", help="what this machine can do")
     r = sub.add_parser("render"); r.add_argument("project"); r.add_argument("--fps", type=int, default=30)
     r.add_argument("--music"); r.add_argument("--music-vol", default="0.18")
     r.add_argument("--workers", type=int, default=4, help="parallel browsers (default 4)")
-    r.add_argument("--from", dest="start", type=float, help="test render: start second (presenter + matte mode only)")
+    r.add_argument("--from", dest="start", type=float, help="test render: start second (writes output/<name>-test.mp4, no audio)")
     r.add_argument("--to", dest="end", type=float, help="test render: end second")
     r.add_argument("--crf", type=int, default=14, help="x264 quality, lower = better (default 14, visually lossless)")
+    r.add_argument("--no-loudnorm", action="store_true", help="keep the audio level as it is (default: normalise to -14 LUFS)")
     c = sub.add_parser("capture"); c.add_argument("project"); c.add_argument("--url", required=True)
     c.add_argument("--find", help="exact text on the page to highlight (copy it from the page)")
     c.add_argument("--name", help="shot name (default: from the URL)")
@@ -613,9 +1446,12 @@ def main():
     bk.add_argument("--from-video", dest="from_video", help="use a still from this footage instead"); bk.add_argument("--at", type=float, default=1.0)
     fr = sub.add_parser("frames"); fr.add_argument("project"); fr.add_argument("video")
     fr.add_argument("--every", type=float, default=1.0, help="seconds between reference frames (default 1)")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")      # Windows consoles
     a = ap.parse_args()
     {"new": cmd_new, "segments": cmd_segments, "sheet": cmd_sheet, "render": cmd_render,
-     "capture": cmd_capture, "frames": cmd_frames, "config": cmd_config, "backdrop": cmd_backdrop}[a.cmd](a)
+     "capture": cmd_capture, "frames": cmd_frames, "config": cmd_config, "backdrop": cmd_backdrop,
+     "brand": cmd_brand, "plan": cmd_plan, "lint": cmd_lint, "align": cmd_align, "voice": cmd_voice, "guide": cmd_guide, "doctor": cmd_doctor}[a.cmd](a)
 
 
 main()

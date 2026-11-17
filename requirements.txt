@@ -1,5 +1,10 @@
 playwright>=1.45
 Pillow>=10.0
+
+# presenter cut-out and shorts tooling (optional)
 numpy>=1.26
-opencv-python>=4.9
+opencv-python>=4.9        # or opencv-python-headless on a server
 onnxruntime>=1.18
+
+# word timings for shorts (optional; `tools/shorts.py align`)
+# faster-whisper>=1.0

@@ -1,0 +1,534 @@
+{
+  "_about": "Catalogue of everything script.js can contain. Read by `python tools/shorts.py guide` (for any AI model or person) and by `lint` (to catch unknown types and missing fields). Keep it in step with short.html.",
+  "frame": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "safe_zones_px": {
+    "organic": {
+      "top": 200,
+      "bottom": 400,
+      "left": 60,
+      "right": 150
+    },
+    "strict": {
+      "top": 288,
+      "bottom": 672,
+      "left": 120,
+      "right": 192
+    },
+    "note": "Second-hand figures (platform ad templates relayed by third parties). 'organic' is the default; use safe:'strict' for paid ads. Check against a real upload."
+  },
+  "script_keys": {
+    "brand": "handle shown at the top when there is no logo",
+    "logo": "image file in the project folder, shown instead of brand (omit to use the brand's logo; null = no logo)",
+    "look": "omit = the brand in brand.js if `brand` was run, otherwise 'clean'. Or force 'clean' | 'dark' | 'warm' | 'brand'",
+    "theme": "{ accent:'#hex', dark:'#hex', bg:'#hex', secondary:'#hex' } recolours any look (brand.js sets this for you)",
+    "safe": "'organic' (default) | 'strict' | 'none'",
+    "captionStyle": "'stroke' | 'scrim' (omit for the default shadow); use over busy backdrops or footage",
+    "syncWords": "true = caption key words pop when spoken (needs words.js and captions in the voice's language)",
+    "audio": "voiceover file; its length sets the video length",
+    "duration": "seconds; only needed when there is no voice",
+    "presenter": "talking-head clip in the project folder, or null",
+    "presenterOffset": "seconds to skip at the start of the presenter clip",
+    "backdrops": "[{ src, t, end, zoom, pan, focus, dim, blur, fadeIn, fadeOut }] image/video files, or built-in backgrounds [{ style:'white' | 'sky' | 'night' | 'brand' | 'paper', t, end, ink:'dark' | 'light' }]",
+    "moves": "presenter only, needs a matte: [{ t, end, mode:'anchor', scale:0.6, side:'right'|'left'|'center' }, { t, mode:'punch', amount:0.12 }]",
+    "scenes": "the list of scenes below",
+    "captions": "{ style:'pill' | 'outline' | 'bold' | 'word', words:4, pos:'low' | 'mid' | 'split' } spoken captions built from words.js, each word turning solid as it is said ('word' = one word at a time); only when captions are in the voice's language",
+    "splitCard": "{ left, top, width, height, radius } where the presenter card sits during split scenes (default: bottom third)"
+  },
+  "timing": {
+    "t / end": "exact seconds",
+    "seg": "n or [n, m]: spoken line(s) from segments.js (written by `segments`)",
+    "word": "'text' or ['text', nth]: start when this word is spoken, from words.js (written by `align`)",
+    "rule": "A scene runs until the next scene in its lane. Captions (cap, title) are one lane; every other type is the visual lane. Any visual may carry cap:{ lead, key, hl }."
+  },
+  "scenes": {
+    "cap": {
+      "use": "the spoken idea in 2-5 bold words",
+      "required": [
+        "key"
+      ],
+      "optional": [
+        "lead",
+        "hl",
+        "pos",
+        "sync"
+      ],
+      "notes": "pos: 'top' | 'mid' | 'low'. hl:true = accent box, for the one word that matters."
+    },
+    "title": {
+      "use": "hook caption, centred",
+      "required": [
+        "key"
+      ],
+      "optional": [
+        "lead",
+        "hl",
+        "pos",
+        "sync"
+      ]
+    },
+    "bignum": {
+      "use": "one number or date that carries the point",
+      "required": [
+        "value"
+      ],
+      "optional": [
+        "unit",
+        "kicker",
+        "badges"
+      ],
+      "notes": "badges: source names as chips. Counts up when value is a number."
+    },
+    "stat": {
+      "use": "one key fact on a dark card",
+      "required": [
+        "value",
+        "label"
+      ],
+      "optional": []
+    },
+    "compare": {
+      "use": "2-3 things compared",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "layout",
+        "vs",
+        "gap"
+      ],
+      "item": [
+        "name",
+        "value",
+        "icon",
+        "sub",
+        "bar",
+        "win"
+      ],
+      "notes": "layout:'stack' (rows, default for 3+ items or when bar is set) | 'side'. bar: 0-100, or true to size it from the value. win:true outlines the winner."
+    },
+    "chart": {
+      "use": "the same measure across items",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "title",
+        "note",
+        "dir",
+        "gap"
+      ],
+      "item": [
+        "name",
+        "value",
+        "label",
+        "hl"
+      ],
+      "notes": "dir:'v' columns (up to 4) | 'h' rows (default for 5+, max 6). Real values only; name the source in note."
+    },
+    "ring": {
+      "use": "one percentage",
+      "required": [
+        "value"
+      ],
+      "optional": [
+        "text",
+        "label",
+        "note"
+      ],
+      "notes": "value 0-100."
+    },
+    "line": {
+      "use": "one trend over time",
+      "required": [
+        "points"
+      ],
+      "optional": [
+        "title",
+        "note",
+        "min",
+        "draw"
+      ],
+      "item": [
+        "x",
+        "y",
+        "label"
+      ],
+      "notes": "3-8 points, one series; only the first and last values are labelled."
+    },
+    "timeline": {
+      "use": "dated steps or deadlines",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "title",
+        "note",
+        "gap"
+      ],
+      "item": [
+        "when",
+        "text",
+        "at"
+      ],
+      "notes": "3-5 items."
+    },
+    "dosdonts": {
+      "use": "rules, mistakes, requirements",
+      "required": [],
+      "optional": [
+        "title",
+        "dos",
+        "donts",
+        "gap"
+      ],
+      "notes": "3 short phrases per side, verbs first."
+    },
+    "pills": {
+      "use": "who it is for / not for",
+      "required": [
+        "title",
+        "items"
+      ],
+      "optional": [
+        "ok",
+        "shrink"
+      ]
+    },
+    "list": {
+      "use": "steps or a checklist",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "title",
+        "icons",
+        "gap",
+        "at"
+      ],
+      "notes": "3-5 items. at:[seconds] puts each row on its narrated beat."
+    },
+    "badges": {
+      "use": "2-3 numbers to remember (recap)",
+      "required": [
+        "items"
+      ],
+      "optional": [],
+      "item": [
+        "value",
+        "label"
+      ]
+    },
+    "stamp": {
+      "use": "a verdict slammed on screen",
+      "required": [
+        "text"
+      ],
+      "optional": [
+        "good",
+        "sub"
+      ]
+    },
+    "quote": {
+      "use": "a sentence from an official source",
+      "required": [
+        "source",
+        "text"
+      ],
+      "optional": [
+        "mark",
+        "by",
+        "url",
+        "at"
+      ]
+    },
+    "web": {
+      "use": "the source page with the sentence highlighted",
+      "required": [
+        "img",
+        "url"
+      ],
+      "optional": [
+        "srcWidth",
+        "from",
+        "to",
+        "marks",
+        "scrollFor"
+      ],
+      "notes": "Paste the scene printed by `capture`."
+    },
+    "doc": {
+      "use": "document / notice B-roll",
+      "required": [],
+      "optional": [
+        "img",
+        "marks"
+      ]
+    },
+    "photo": {
+      "use": "framed photo or short clip",
+      "required": [],
+      "optional": [
+        "src",
+        "caption",
+        "tilt",
+        "style",
+        "items"
+      ],
+      "notes": "style:'polaroid' | 'card'. items:[{src, caption}] for a 2-3 photo collage."
+    },
+    "broll": {
+      "use": "full-screen image or video",
+      "required": [
+        "src"
+      ],
+      "optional": []
+    },
+    "hero": {
+      "use": "a feeling or transition, 1-2 s",
+      "required": [
+        "icon"
+      ],
+      "optional": []
+    },
+    "cta": {
+      "use": "the one closing action",
+      "required": [
+        "text"
+      ],
+      "optional": [
+        "icon",
+        "sub",
+        "shrink"
+      ]
+    },
+    "kinetic": {
+      "use": "big words that carry the message on their own (product-film style)",
+      "required": [
+        "text"
+      ],
+      "optional": [
+        "size",
+        "pos",
+        "align",
+        "glow",
+        "sub",
+        "gap"
+      ],
+      "notes": "2-4 words. *word* = accent colour, _word_ = italic. pos:'top'|'low', align:'left'."
+    },
+    "phone": {
+      "use": "a 3D phone that rises into frame, optionally with notification cards flying in",
+      "required": [],
+      "optional": [
+        "title",
+        "screen",
+        "call",
+        "notes",
+        "rise"
+      ],
+      "item": [
+        "name",
+        "text",
+        "time",
+        "at",
+        "x",
+        "y"
+      ],
+      "notes": "screen: image/video file of the app; or call:{name,status} for a built-in call screen. notes: up to 6 cards."
+    },
+    "orb": {
+      "use": "a glowing orb for an assistant / AI / signal, with a label or a chip",
+      "required": [],
+      "optional": [
+        "label",
+        "chip",
+        "chipAt",
+        "at",
+        "to",
+        "size"
+      ],
+      "notes": "at/to: [x,y] in px, the orb drifts between them. Best on backdrop style 'night' or 'brand'."
+    },
+    "glass": {
+      "use": "a short checklist or feature list on a glass card",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "title",
+        "icons",
+        "gap",
+        "at",
+        "exit"
+      ],
+      "notes": "3-5 items. exit:'zoom' flies through the card into the next scene."
+    },
+    "screen": {
+      "use": "a screen recording or screenshot floating in 3D, turning and zooming to what matters",
+      "required": [
+        "src"
+      ],
+      "optional": [
+        "w",
+        "h",
+        "tilt",
+        "to",
+        "zoom",
+        "focus",
+        "spot"
+      ],
+      "notes": "tilt/to: [rotY,rotX] degrees. spot:{x,y,w,h,at} in % of the picture."
+    },
+    "mindmap": {
+      "use": "a framework drawn node by node on paper while the camera follows (creator-explainer style)",
+      "required": [
+        "nodes"
+      ],
+      "optional": [
+        "cam",
+        "glow",
+        "color",
+        "paper"
+      ],
+      "item": [
+        "id",
+        "text",
+        "x",
+        "y",
+        "size",
+        "kind",
+        "parent",
+        "at"
+      ],
+      "notes": "kind:'oval' (default) | 'plain' | 'hand' (big handwritten centre word). cam:[{at,x,y,zoom}] camera moves; end on a zoomed-out move that shows the whole map. glow:[{id,at,for}]."
+    },
+    "stickies": {
+      "use": "sticky notes popping up (goals, examples, a messy to-do list)",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "gap",
+        "at"
+      ],
+      "item": [
+        "text",
+        "color",
+        "x",
+        "y",
+        "rot"
+      ],
+      "notes": "3-5 notes, 2-4 words each."
+    },
+    "tags": {
+      "use": "2-3 key words in hand-drawn ovals, appearing as each is said",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "color",
+        "gap"
+      ],
+      "item": [
+        "text",
+        "x",
+        "y",
+        "rot",
+        "at"
+      ]
+    },
+    "headline": {
+      "use": "an editorial title in the top third, above the presenter's head; optionally a question that types on",
+      "required": [
+        "title"
+      ],
+      "optional": [
+        "kicker",
+        "sub",
+        "body",
+        "type",
+        "bodyAt",
+        "subAt",
+        "colors",
+        "size",
+        "blob",
+        "gap"
+      ],
+      "notes": "title 1-3 words (*word* / _word_ work). body: one sentence, under 110 characters."
+    },
+    "orbit": {
+      "use": "many examples around one idea: tiles on a turning ring, the idea lands in the middle",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "hub",
+        "hubAt",
+        "radius",
+        "turn",
+        "gap"
+      ],
+      "item": [
+        "img",
+        "icon",
+        "text"
+      ],
+      "notes": "4-8 tiles."
+    },
+    "skeleton": {
+      "use": "'here is what it looks like in a script': a document as grey bars, one line highlighted and explained, or real sentences typed and grouped",
+      "required": [],
+      "optional": [
+        "title",
+        "lines",
+        "marks",
+        "callout",
+        "bracket",
+        "typeAt",
+        "typeAts",
+        "wide"
+      ],
+      "notes": "lines: a number, or a list of numbers (bars) and strings (sentences). marks:[{line,color,at}]. callout:{title,text,tags,at}. bracket:{from,to,label,at}."
+    },
+    "picklist": {
+      "use": "a numbered list where one item is the point",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "focus",
+        "focusAt",
+        "numbers",
+        "gap"
+      ],
+      "notes": "Up to 8 short items."
+    }
+  },
+  "common_scene_keys": [
+    "type",
+    "t",
+    "end",
+    "seg",
+    "word",
+    "lead_in",
+    "cap",
+    "depth",
+    "anchor",
+    "exit",
+    "zoomTo",
+    "split",
+    "head",
+    "headLine"
+  ],
+  "formats": {
+    "data explainer": "voiceover + bold captions + charts, comparisons, sources (cap, bignum, chart, compare, ring, line, timeline, web, quote). Example: projects/shorts-reference",
+    "product film": "no presenter, little or no voice: kinetic type, 3D phone, cards, orb, glass card; the background changes with the story (white -> sky -> night -> white), 12-20 s. Example: projects/shorts-kinetic-reference",
+    "creator explainer": "a presenter intercut with full-screen graphics: mindmap on paper, stickies, tags, screen recordings, spoken captions (captions:{style:'pill'}), 30-60 s",
+    "story b-roll": "full-screen footage or generated clips (broll / backdrops) with small spoken captions (captions:{style:'outline'}), then presenter or screen scenes",
+    "split explainer": "a presenter in a card at the bottom, a black panel above with a section title (head) and a diagram that builds (orbit, skeleton, picklist, line, phone, chart...), one-word captions between them (captions:{style:'word',pos:'split'}); cut to the full-screen presenter between sections. Give every panel scene split:true. 45-90 s"
+  }
+}
