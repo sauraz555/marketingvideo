@@ -633,8 +633,9 @@ const LAND_NATIVE = new Set(['cap','title','kinetic','bignum','callout','broll',
   const mix = (a, b, k) => '#' + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * k).toString(16).padStart(2,'0')).join('');
   const lum = c => { const [r,g,b] = hex(c).map(v => { v /= 255; return v <= .03928 ? v/12.92 : ((v+.055)/1.055) ** 2.4; }); return .2126*r + .7152*g + .0722*b; };
   const t = {...(stage.dataset.look === 'brand' && BRAND ? BRAND.theme : {}), ...(S.theme || {})};   // SCRIPT.theme = { accent:'#E4002B', dark, bg, font, numfont } overrides any look
-  if (!t.accent && !t.dark && !t.bg && !t.font && !t.numfont) return;
+  if (!t.accent && !t.dark && !t.bg && !t.font && !t.numfont && !t.pack) return;
   const set = (k, v) => v && stage.style.setProperty('--' + k, v);
+  if (t.pack) set('cr', t.pack);   // colour of the style-pack scenes (pillar, diamonds, lanes, rules, callout, 'crimson' backdrop); default red
   if (t.accent) { const a = t.accent;
     set('accent', a); set('onaccent', lum(a) > .45 ? '#14161A' : '#FFFFFF'); set('accent2', t.accent2 || mix(a, '#ffffff', .72));
     if (stage.dataset.look !== 'dark') { set('blob1', mix(a, '#ffffff', .78)); set('blob2', mix(t.secondary || a, '#ffffff', .84)); set('bg2', mix(a, '#ffffff', .90)); } }

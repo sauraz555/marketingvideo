@@ -1615,6 +1615,8 @@ def _draft(p, plan, words, presenter, frame, style, has_voice):
         script.pop("brand")
     if not has_voice:
         script.update(audio=None, duration=round(total, 1))
+    else:
+        script["duration"] = round(duration(p / "voice.mp3") + 0.3, 2)     # the whole voice, last word included
     script.update(keys)
     if fmt == "crimson explainer" or style == "crimson":
         script["theme"] = {"accent": "#E3202E"}
@@ -1655,8 +1657,8 @@ def cmd_direct(a):
     name = a.project
     p = ROOT / "projects" / name
     src = pathlib.Path(a.video).resolve() if a.video else None
-    if not src and not a.script:
-        sys.exit("give the footage (--video clip.mp4) or the words (--script script.txt [--voice voice.mp3])")
+    if not src and not a.script and not a.voice:
+        sys.exit("give the footage (--video clip.mp4), a voiceover (--voice voice.mp3) or the words (--script script.txt)")
     if src and not src.exists():
         sys.exit("no such file: %s" % src)
     step = lambda s: print("\n== %s" % s, flush=True)   # noqa: E731
