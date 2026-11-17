@@ -37,7 +37,8 @@
     "scenes": "the list of scenes below",
     "captions": "{ style:'pill' | 'outline' | 'bold' | 'word', words:4, pos:'low' | 'mid' | 'split' } spoken captions built from words.js, each word turning solid as it is said ('word' = one word at a time); only when captions are in the voice's language",
     "splitCard": "{ left, top, width, height, radius } where the presenter card sits during split scenes (default: bottom third)",
-    "frame": "'portrait' (default, 1080x1920) | 'landscape' (1920x1080). Landscape has its own layout for the main scenes; the rest are drawn as a portrait panel beside the person"
+    "frame": "'portrait' (default, 1080x1920) | 'landscape' (1920x1080). Landscape has its own layout for the main scenes; the rest are drawn as a portrait panel beside the person",
+    "news": "{ label:'BREAKING', kicker, ticker:[..], speed, lift, at } a professional breaking-news strap: red label, white kicker, a ticker that scrolls all video (put licence numbers such as MARN here so they stay on screen). Captions move up above it"
   },
   "timing": {
     "t / end": "exact seconds",
@@ -277,9 +278,11 @@
         "caption",
         "tilt",
         "style",
-        "items"
+        "items",
+        "size",
+        "top"
       ],
-      "notes": "style:'polaroid' | 'card'. items:[{src, caption}] for a 2-3 photo collage."
+      "notes": "style:'polaroid' | 'card'. items:[{src, caption}] for a 2-3 photo collage. size: 0.5-1 scales the frame; top: px. A polaroid over a blurred backdrop of the same picture, with cap:{lead, key, pos:'mid'} under it, makes a strong section opener."
     },
     "broll": {
       "use": "full-screen image or video",

@@ -277,7 +277,7 @@ body{margin:0;background:#0d0d0d;display:flex;flex-direction:column;align-items:
 .cta .qr{display:inline-block;background:#fff;border-radius:40px;padding:34px 34px 24px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
 .cta .qr img{display:block;width:460px;height:460px;image-rendering:pixelated}
 .cta .qr .ql{margin-top:14px;font-weight:800;font-size:40px;letter-spacing:.04em;text-transform:uppercase;color:#14161A}
-.cta.withqr{top:330px} .cta.withqr .t{font-size:78px;margin-top:40px}
+.cta.withqr{top:330px} .cta.withqr .t{font-size:78px;margin-top:40px} .cta.withqr .s{font-size:30px;padding:14px 30px;white-space:nowrap;margin-top:28px}
 #stage[data-frame="landscape"] .cta.withqr{top:60px} #stage[data-frame="landscape"] .cta.withqr .qr img{width:400px;height:400px}
 .cta .s{display:inline-block;margin-top:36px;background:var(--accent);color:var(--onaccent);font-weight:800;font-size:48px;padding:18px 40px;border-radius:999px}
 
@@ -515,6 +515,19 @@ body[data-layer="bd"] #vis, body[data-layer="bd"] #caps, body[data-layer="bd"] #
 /* the person stepped aside into the lower-right card: graphics move left */
 #stage[data-frame="landscape"] .anchor.pillar,#stage[data-frame="landscape"] .anchor.glass{justify-content:flex-start;align-items:center;padding:0 0 0 140px}
 #stage[data-frame="landscape"] .anchor.stat,#stage[data-frame="landscape"] .anchor.quote,#stage[data-frame="landscape"] .anchor.cta{right:auto;width:1150px;padding-left:120px}
+
+/* news strap (SCRIPT.news) */
+#news{position:absolute;left:0;right:0;height:66px;display:flex;align-items:stretch;z-index:5;font-family:var(--kfont);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+#news .nl{flex:none;display:flex;align-items:stretch}
+#news .nl b{display:flex;align-items:center;padding:0 22px 0 26px;background:#C8102E;color:#fff;font-weight:800;font-size:30px;letter-spacing:.08em}
+#news .nl span{display:flex;align-items:center;padding:0 22px;background:#fff;color:#0F2440;font-weight:700;font-size:26px;letter-spacing:.04em;text-transform:uppercase}
+#news .nt{flex:1;overflow:hidden;background:rgba(10,22,44,.92);display:flex;align-items:center;border-top:3px solid var(--accent)}
+#news .nr{display:flex;white-space:nowrap;will-change:transform}
+#news .nr em{font-style:normal;font-weight:600;font-size:28px;color:#fff;padding-right:0}
+#news .nr i{font-style:normal;color:#C8102E;font-size:16px;margin:0 22px;vertical-align:middle}
+#stage.hasnews #subs{top:calc(1920px - var(--safe-bottom) - 214px)}
+#stage[data-frame="landscape"].hasnews #subs{top:auto;bottom:190px}
+body[data-layer="back"] #news, body[data-layer="bd"] #news{display:none!important}
 
 /* ===== style pack B: creator explainer (mind map on paper, sticky notes, oval tags, small pill captions) ===== */
 .mindmap{overflow:hidden}
@@ -821,6 +834,8 @@ const B = {
       return `<div class="pf ${style}" data-tilt="${it.tilt ?? (multi ? L[2] : -4)}"${pos}>${media}${style === 'polaroid' && it.caption ? `<div class="cp">${esc(it.caption)}</div>` : ''}</div>`;
     };
     const el = h(`<div class="abs photo ${multi ? 'multi' : ''}">${items.map(mk).join('')}</div>`);
+    if (sc.size) { el.style.transform = `scale(${sc.size})`; el.style.transformOrigin = '50% 0'; }   // size: 0.6-1 scales the frame
+    if (sc.top != null) el.style.top = sc.top + 'px';
     return { el, inn(tl,t,end){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
       window.MEDIA_EXTRA = window.MEDIA_EXTRA || [];
       el.querySelectorAll('video').forEach(v => window.MEDIA_EXTRA.push({v, t0: t, t1: end}));
@@ -1244,7 +1259,7 @@ TL.fromTo('#b2',{x:0,y:0},{x:-240,y:-380,duration:DUR,ease:'sine.inOut'},0);
 const lanes = {cap:[], vis:[]};
 S.scenes.forEach(sc => {
   (sc.type === 'cap' || sc.type === 'title' ? lanes.cap : lanes.vis).push(sc);
-  if (sc.cap) lanes.cap.push({pos: sc.type === 'web' && !S.presenter ? 'low' : '', ...sc.cap, type:'cap', t:sc.t, seg:sc.seg, end:sc.cap.end ?? sc.end});
+  if (sc.cap) lanes.cap.push({pos: sc.type === 'web' && !S.presenter ? 'low' : '', ...sc.cap, type:'cap', t:sc.t, seg:sc.seg, word:sc.word, lead_in:sc.lead_in, end:sc.cap.end ?? sc.end});   // the caption starts with its scene, however that scene is timed
 });
 const pw = document.getElementById('pwrap');
 // a caption ends when the next scene of either lane starts; a visual ends when the next visual starts
@@ -1344,6 +1359,19 @@ for (const [lane, list] of Object.entries(lanes)) {
   });
 })();
 
+
+// ---- news strap: SCRIPT.news = { label:'BREAKING', kicker:'Migration Tasmania', ticker:['...', '...'], speed: 90 }
+//      a professional breaking-news treatment: a red label, a navy band and a ticker that scrolls for the whole video.
+//      Put licence numbers (e.g. MARN) in the ticker so they stay on screen throughout. Captions move up above the band.
+if (S.news) { const N = S.news, line = (N.ticker || []).map(esc).join('<i>●</i>');
+  const strap = h(`<div id="news"><div class="nl"><b>${esc(N.label || 'BREAKING')}</b>${N.kicker ? `<span>${esc(N.kicker)}</span>` : ''}</div><div class="nt"><div class="nr">${Array(8).fill(`<em>${line}<i>●</i></em>`).join('')}</div></div></div>`);
+  stage.appendChild(strap); stage.classList.add('hasnews');
+  const sb = parseFloat(getComputedStyle(stage).getPropertyValue('--safe-bottom')) || 400;
+  strap.style.top = (STAGE_H - sb - (N.lift ?? 96)) + 'px';
+  const nr = strap.querySelector('.nr'), sp = N.speed || 90;
+  TL.fromTo(nr,{x:0},{x:-sp*DUR,duration:DUR,ease:'none',modifiers:{x: v => { const w = nr.firstChild.offsetWidth || 1; return (-((-parseFloat(v)) % w)).toFixed(1) + 'px'; }}},0);
+  TL.fromTo(strap,{autoAlpha:0,y:40},{autoAlpha:1,y:0,duration:.4,ease:'power3.out'},N.at ?? .2);
+}
 // ---- spoken captions: S.captions = { style:'pill' | 'bold', words: 4, pos:'low' | 'mid' } builds small captions straight from words.js;
 //      each word turns solid as it is spoken. Use when captions are in the voice's language (they are the transcript). ----
 if (S.captions && WORDS.length) { const C = S.captions === true ? {} : S.captions, subs = document.getElementById('subs'), maxW = C.words || (C.style === 'word' ? 1 : 4);
