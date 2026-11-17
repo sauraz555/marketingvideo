@@ -1,0 +1,173 @@
+{
+  "_about": "Design modes: one name for a whole design (format, look, hook, section openers, strap, captions, ending). Call one with `direct --mode <name>`, or `--mode auto` to let the director pick from the content (the `when` words and the `needs` rules below). `python tools/shorts.py modes` lists them. Add a mode by copying one and changing it.",
+  "modes": {
+    "policy-update": {
+      "label": "Breaking policy update",
+      "description": "A rule, visa or programme change, told like a calm news bulletin: a red BREAKING strap with a scrolling ticker (licence numbers such as MARN stay in it), the N changes listed from the first frame, a numbered opener per change (a polaroid of the section's picture when there is one), the detail as do/don't panels, cards and diamonds, word-by-word captions, a QR booking card at the end.",
+      "when": [
+        "from 1",
+        "new requirement",
+        "requirements",
+        "changes",
+        "change",
+        "update",
+        "announced",
+        "effective",
+        "policy",
+        "nomination",
+        "visa",
+        "eligib*",
+        "deadline",
+        "rules",
+        "no longer",
+        "now only"
+      ],
+      "needs": {},
+      "format": "data explainer",
+      "hook": "list",
+      "hook_word": "CHANGES",
+      "openers": "numbered",
+      "captions": {
+        "style": "pill"
+      },
+      "news": {
+        "label": "BREAKING"
+      },
+      "backdrop": "brand",
+      "cta": "qr",
+      "licences": true,
+      "detail": "bulletin"
+    },
+    "event-invite": {
+      "label": "Event invitation",
+      "description": "Bring people to a place on a date: the event name huge from the first frame, the problem it solves as a short list, the place on a map pin, and a closing card with date, place and QR. Calm brand colours, captions on.",
+      "when": [
+        "festival",
+        "event",
+        "come to",
+        "join us",
+        "visit us",
+        "seminar",
+        "expo",
+        "workshop",
+        "meet us",
+        "stall",
+        "booth",
+        "free counselling",
+        "free consultation"
+      ],
+      "needs": {},
+      "format": "data explainer",
+      "hook": "title",
+      "openers": null,
+      "captions": {
+        "style": "pill"
+      },
+      "backdrop": "brand",
+      "cta": "qr",
+      "licences": true
+    },
+    "crimson-explainer": {
+      "label": "Crimson explainer",
+      "description": "A long teaching video with a presenter: black-to-red glow, frosted glass pillar cards, red diamond lists, numbered lanes with a moving camera, rule pills, red callouts beside the head, huge words behind the head. Modelled on a premium YouTube motion-design explainer.",
+      "when": [
+        "pillar",
+        "principles",
+        "framework",
+        "lanes",
+        "stage one",
+        "first,",
+        "second,",
+        "third,",
+        "roadmap",
+        "fundamentals"
+      ],
+      "needs": {
+        "presenter": true,
+        "min_seconds": 40
+      },
+      "format": "crimson explainer",
+      "hook": "kinetic",
+      "openers": "numbered",
+      "captions": null,
+      "backdrop": "crimson",
+      "theme": {
+        "accent": "#E3202E"
+      },
+      "cta": "plain",
+      "licences": true
+    },
+    "product-film": {
+      "label": "Product film",
+      "description": "No presenter, little or no voice: two to four big words at a time, a 3D phone, cards flying in, a glowing orb, a glass checklist, backgrounds that change with the story.",
+      "when": [
+        "app",
+        "launch",
+        "introducing",
+        "new feature",
+        "now available",
+        "download"
+      ],
+      "needs": {
+        "voice": false
+      },
+      "format": "product film",
+      "hook": "kinetic",
+      "openers": null,
+      "captions": null,
+      "backdrop": "night",
+      "cta": "plain",
+      "licences": false
+    },
+    "creator-explainer": {
+      "label": "Creator explainer",
+      "description": "A presenter talking to camera, graphics above the head: a mind map on paper, sticky notes, words in hand-drawn ovals, small spoken captions that fill in word by word.",
+      "when": [
+        "i ",
+        "my ",
+        "you should",
+        "here's how",
+        "tip",
+        "mistake",
+        "story"
+      ],
+      "needs": {
+        "presenter": true
+      },
+      "format": "creator explainer",
+      "hook": "kinetic",
+      "openers": null,
+      "captions": {
+        "style": "pill"
+      },
+      "backdrop": null,
+      "cta": "plain",
+      "licences": true
+    },
+    "data-explainer": {
+      "label": "Data explainer",
+      "description": "Voiceover with numbers: bold two-line captions, big numbers that count up, charts, comparisons, source pages with the sentence highlighted. Every figure carries its source.",
+      "when": [
+        "percent",
+        "%",
+        "per cent",
+        "million",
+        "billion",
+        "statistics",
+        "data",
+        "report",
+        "survey",
+        "average",
+        "compared"
+      ],
+      "needs": {},
+      "format": "data explainer",
+      "hook": "title",
+      "openers": null,
+      "captions": null,
+      "backdrop": "brand",
+      "cta": "plain",
+      "licences": true
+    }
+  }
+}

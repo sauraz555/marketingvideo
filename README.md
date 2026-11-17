@@ -37,6 +37,8 @@ python tools/shorts.py direct my-topic --video clip.mp4 [--brand https://company
 python tools/shorts.py direct my-topic --script script.txt [--voice voice.mp3]
 ```
 
+Design modes give a whole look by name (`python tools/shorts.py modes`): `--mode policy-update` (breaking-news bulletin with licence numbers and a QR), `event-invite`, `crimson-explainer`, `product-film`, `creator-explainer`, `data-explainer`, or `--mode auto` to let the director pick from the content.
+
 Then review `projects/my-topic/qa/sheet.jpg`, refine `script.js`, and `render`. Step by step instead:
 
 ```

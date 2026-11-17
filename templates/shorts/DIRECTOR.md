@@ -38,6 +38,21 @@ The draft is a first pass by rule, never the finished video. Then you direct:
 - **Vary the scene types and keep something changing every 2-4 s.**
 - **Then:** `lint` (0 errors), `sheet`, a test render of the busiest 5 seconds, and the full `render`.
 
+### Design modes: a whole design by name
+A mode bundles everything learned about one kind of video: format, look, hook, section openers, strap, captions, backdrops and ending. They live in `templates/shorts/modes.json`; `python tools/shorts.py modes` lists them.
+- **Call one:** `direct <name> ... --mode policy-update`. **Let the director pick:** `--mode auto` (the default). It scores each mode on the words it listens for (`when`, whole words; `eligib*` matches the start of a word) and what it needs (`needs`: presenter, voice, a minimum length), and prints what it heard. `--mode none` uses the format alone.
+- **The modes:**
+  - **policy-update:** a rule or visa change told as a calm news bulletin. A red BREAKING strap with a ticker that carries the licence numbers, "N CHANGES" listed from the first frame, a numbered opener per change (a polaroid of the section's picture when `media/` has pictures, used in order), one bulletin card per section that builds point by point, captions on, and a QR booking card (`--qr`) with the licence numbers.
+  - **event-invite:** bring people to a place and date; the place pinned on the map, captions on, QR ending.
+  - **crimson-explainer:** a long teaching video with a presenter (pillar cards, diamonds, lanes, rules).
+  - **product-film:** no voice; big type, phone, orb, glass.
+  - **creator-explainer:** a presenter with graphics above the head.
+  - **data-explainer:** numbers, charts, sources.
+- **Brand and licences come with it:** `--brand <site>` reads the logo (and makes `brand/logo-light.png` for dark designs when the logo has a flat background), the colours and any licence numbers printed on the site (MARN, ABN). Modes that set `licences: true` keep the MARN on screen (ticker and closing card). If a business must show a licence and none was found, the director says so: add it by hand.
+- **The script fixes the transcript:** with `--script`, word spellings in `words.js` (and so the captions) follow the script ("Interlaced" → "Interlace").
+- **Section headings:** a mode with numbered openers finds the sections from short stand-alone lines ("Motor mechanics.", "TSG pathway."). Write scripts that way and the structure builds itself.
+- **Add a mode:** copy one in `modes.json`, change its words and parts, and run `modes` to check it. A mode is a starting point: read the sheet, fix wording, check facts, then render.
+
 ### Camera moves (`moves` in script.js; with or without a cut-out)
 | Move | Use it for | Fields |
 |---|---|---|

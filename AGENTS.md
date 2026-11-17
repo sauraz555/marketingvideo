@@ -7,6 +7,7 @@ from the shell, so any model or person can drive it. `CLAUDE.md` holds the same 
 
 ```
 python tools/shorts.py direct <name> --video clip.mp4 [--brand https://site] [--frame landscape]   # ONE COMMAND: a full first draft
+python tools/shorts.py modes           # design modes: a whole look by name (direct --mode <name> | auto)
 python tools/shorts.py doctor          # what this machine can do (nothing optional is required)
 python tools/shorts.py guide           # the full brief, every scene type, every command   (--json for data)
 python tools/shorts.py new <name> --voice voice.mp3

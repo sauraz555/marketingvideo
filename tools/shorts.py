@@ -4,7 +4,8 @@ Works from any shell, for a person or for any AI model: `guide` prints the whole
 `doctor` says what this machine can do, `lint --json` returns machine-readable problems. No service is compulsory.
 
 Run from the repo root:
-  python tools/shorts.py direct <name> --video clip.mp4 [--brand https://site] [--frame landscape] [--format ...]   # ONE COMMAND: a full first draft
+  python tools/shorts.py direct <name> --video clip.mp4 [--brand https://site] [--frame landscape] [--mode auto|<mode>] [--qr qr.png]   # ONE COMMAND: a full first draft
+  python tools/shorts.py modes                     # the design modes (a whole look by name; --mode auto picks one from the content)
   python tools/shorts.py guide [--json]            # how to make a short: the brief, every scene type, every command
   python tools/shorts.py doctor                    # what is installed (browser, ffmpeg, fonts, cut-out model, voice key)
   python tools/shorts.py new <name> [--voice <voice.mp3>] [--presenter <clip.mp4>]   # projects/<name>/
@@ -775,7 +776,11 @@ BRAND_JS = r"""() => {
     if (m && !/^(share|sharer|intent|watch|p|reel)$/i.test(m[2])) socials[m[1].toLowerCase()] = socials[m[1].toLowerCase()] || m[2]; });
   const fam = el => el ? getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g, '').trim() : '';
   const name = meta('og:site_name') || (document.title || '').split(/\s[|–—\-:·]\s/)[0].trim();
-  return {name, title: document.title, description: meta('description') || meta('og:description'), ogImage: meta('og:image'), icon: icon && icon.href,
+  // licence numbers printed on the site (MARN = registered migration agent; ABN): ads must show them, so the director puts them on screen
+  const bodyText = document.body ? document.body.innerText : '';
+  const licences = {marn: [...new Set((bodyText.match(/MARN[:\s#-]*\d{7}/gi) || []).map(x => x.replace(/\D/g, '')))],
+                    abn: ((bodyText.match(/ABN[:\s]*((?:\d\s?){11})/i) || [])[1] || '').replace(/\s/g, '')};
+  return {licences, name, title: document.title, description: meta('description') || meta('og:description'), ogImage: meta('og:image'), icon: icon && icon.href,
           accent, secondary, ranked: ranked.slice(0, 6).map(v => ({hex: v.hex, weight: +v.w.toFixed(1), from: v.why})), logo, logoFrom: how, logoBackground: bgUnder, socials,
           fonts: {heading: fam(document.querySelector('h1, h2')), body: fam(document.body)}, lang: document.documentElement.lang || ''};
 }"""
@@ -829,6 +834,64 @@ async def brand_crawl(p, url):
     return info
 
 
+def _light_logo(p, logo):
+    """A raster logo with a flat background -> brand/logo-light.png: background keyed out, dark parts white, coloured parts kept (brightened)."""
+    if not logo or not str(logo).lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        return None
+    try:
+        import numpy as np
+        from PIL import Image
+        im0 = Image.open(p / logo)
+        if im0.mode in ("RGBA", "LA") and im0.getchannel("A").getextrema()[0] < 250:
+            return None                                         # already transparent: use it as it is
+        im = np.asarray(im0.convert("RGB")).astype(np.float32)
+        border = np.concatenate([im[0], im[-1], im[:, 0], im[:, -1]])
+        bg = np.median(border, axis=0)
+        if np.abs(border - bg).mean() > 18:
+            return None                                         # no flat background to remove
+        alpha = np.clip((np.sqrt(((im - bg) ** 2).sum(-1)) - 12) / 40, 0, 1)
+        col = (im.max(-1) - im.min(-1)) > 40                    # coloured marks (e.g. a blue letter)
+        out = np.zeros(im.shape[:2] + (4,), np.float32)
+        out[..., :3] = 255
+        out[col, :3] = np.clip(im[col] * 1.6 + 30, 0, 255)
+        out[..., 3] = alpha * 255
+        img = Image.fromarray(out.astype(np.uint8), "RGBA")
+        box = img.getchannel("A").point(lambda v: 255 if v > 20 else 0).getbbox()
+        if not box:
+            return None
+        img = img.crop(box)
+        if img.height < 160:
+            img = img.resize((img.width * 4, img.height * 4), Image.LANCZOS)
+        img.save(p / "brand" / "logo-light.png")
+        return "brand/logo-light.png"
+    except Exception:
+        return None
+
+
+def _fix_spelling(p, script_text):
+    """Speech recognition misspells names ("Interlaced"): take each word's spelling from the script where the two line up."""
+    import difflib
+    f = p / "words.js"
+    m = re.search(r"(window\.WORDS\s*=\s*)(\[.*\])(;)", f.read_text(encoding="utf-8"), re.S)
+    if not m:
+        return 0
+    words = json.loads(m.group(2))
+    sw = re.findall(r"[^\s]+", script_text)
+    key = lambda w: re.sub(r"[^\w]", "", w.lower())   # noqa: E731
+    sm = difflib.SequenceMatcher(None, [key(w["w"]) for w in words], [key(x) for x in sw], autojunk=False)
+    n = 0
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == "replace" and i2 - i1 == j2 - j1:
+            for i, j in zip(range(i1, i2), range(j1, j2)):
+                if words[i]["w"] != sw[j]:
+                    words[i]["w"] = sw[j]
+                    n += 1
+    if n:
+        txt = f.read_text(encoding="utf-8")
+        f.write_text(txt[:m.start(2)] + json.dumps(words, ensure_ascii=False) + txt[m.end(2):], encoding="utf-8")
+    return n
+
+
 def cmd_brand(a):
     """Brand kit for a project: brand.js (used by the engine) and brand/brand.json (everything that was found, for the director)."""
     p = proj(a.project)
@@ -871,10 +934,14 @@ def cmd_brand(a):
     handle = a.handle or old.get("handle") or next(("@" + h.lstrip("@") for k in ("tiktok", "instagram", "youtube") for h in [socials.get(k)] if h), "")
     brand = {"name": name, "handle": handle, "url": info.get("url") or old.get("url") or "", "logo": logo, "theme": theme,
              "description": info.get("description") or old.get("description") or "", "socials": socials,
-             "fonts": info.get("fonts") or old.get("fonts") or {}, "found": {k: info.get(k) for k in ("ranked", "logoFrom", "logoBackground", "title", "lang")} if info else old.get("found", {})}
+             "fonts": info.get("fonts") or old.get("fonts") or {}, "licences": info.get("licences") or old.get("licences") or {}, "found": {k: info.get(k) for k in ("ranked", "logoFrom", "logoBackground", "title", "lang")} if info else old.get("found", {})}
     if not (name or theme or logo):
         sys.exit("nothing to save: give --url, or --name / --accent / --logo")
     (p / "brand").mkdir(exist_ok=True)
+    light = _light_logo(p, logo)
+    if light:
+        brand["logo_light"] = light
+        print("  logo    %s  (light version for dark backgrounds: background removed, lettering white)" % light)
     (p / "brand" / "brand.json").write_text(json.dumps(brand, ensure_ascii=False, indent=2), encoding="utf-8")
     (p / "brand.js").write_text("// written by tools/shorts.py brand: the brand this short is made for (details in brand/brand.json)\n"
                                 "window.BRAND = %s;\n" % json.dumps({k: brand[k] for k in ("name", "handle", "url", "logo", "theme")}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1352,6 +1419,144 @@ def cmd_plan(a):
     print("\nwrote %s. This is a first pass by rule: read every beat, change what does not fit, then write script.js." % (p / "plan.json"))
 
 
+# ---------- design modes: one name for a whole design (templates/shorts/modes.json) ----------
+def load_modes():
+    f = TEMPLATE / "modes.json"
+    return json.loads(f.read_text(encoding="utf-8"))["modes"] if f.exists() else {}
+
+
+def pick_mode(text, presenter, has_voice, seconds):
+    """Score every mode on the words it listens for and the conditions it needs; return (name, why) or (None, why)."""
+    low = " " + re.sub(r"\s+", " ", text.lower()) + " "
+    best, why = None, "no mode matched the content"
+    scores = {}
+    for name, m in load_modes().items():
+        need = m.get("needs") or {}
+        if "presenter" in need and bool(presenter) != need["presenter"]:
+            continue
+        if "voice" in need and bool(has_voice) != need["voice"]:
+            continue
+        if seconds < need.get("min_seconds", 0):
+            continue
+        # whole words ("app" must not match "apply"); a trailing * matches the start of a word ("eligib*")
+        hits = [w for w in m.get("when", []) if re.search(r"(?<![\w])" + re.escape(w.lower().rstrip("*")) + ("" if w.endswith("*") or not w[-1:].isalnum() else r"(?![\w])"), low)]
+        scores[name] = (len(hits), hits)
+    if scores:
+        name, (n, hits) = max(scores.items(), key=lambda kv: kv[1][0])
+        if n:
+            best, why = name, "heard: " + ", ".join(hits[:6])
+    return best, why
+
+
+def _apply_mode(p, mode, scenes, script, beats, words, presenter, frame, extras):
+    """Reshape the draft by a design mode: hook, numbered section openers, news strap, captions, backdrops, ending."""
+    W, H = (1920, 1080) if frame == "landscape" else (1080, 1920)
+    brand = {}
+    if (p / "brand" / "brand.json").exists():
+        brand = json.loads((p / "brand" / "brand.json").read_text(encoding="utf-8"))
+    marn = ((brand.get("licences") or {}).get("marn") or []) if mode.get("licences") else []
+    images = sorted([x for x in (p / "media").glob("*") if x.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")]) if (p / "media").exists() else []
+    # section headings: short stand-alone lines ("Motor mechanics.", "TSG pathway.") that the rest of a section explains
+    heads = [b for b in beats if 1 <= len(re.findall(r"[A-Za-z]+", b["say"])) <= 3 and b["role"] != "cta" and b["t"] > 2.0 and not re.search(NUM, b["say"], re.I)]
+    names = [re.sub(r"[.!?,:]+$", "", h["say"]).strip() for h in heads]
+    word = (mode.get("hook_word") or "THINGS").upper()
+    one = word[:-1].title() if word.endswith("S") else word.title()
+    notes = []
+    # numbered openers: each section starts on its own card (a polaroid of the section's picture when the project has pictures)
+    if mode.get("openers") == "numbered" and len(heads) >= 2:
+        for k, h in enumerate(heads):
+            scenes[:] = [s for s in scenes if not (h["t"] - 0.25 <= s["t"] <= h["end"] + 0.25)]
+            if images:
+                img = images[k % len(images)].relative_to(p).as_posix()
+                scenes.append({"t": h["t"], "type": "photo", "style": "polaroid", "src": img, "caption": names[k], "tilt": (-4, 3, -3)[k % 3],
+                               "size": .62, "top": 330, "cap": {"lead": "%s %02d" % (one, k + 1), "key": names[k], "pos": "mid"},
+                               "_why": "%s opener %d: polaroid of the section's picture" % (mode.get("label", ""), k + 1)})
+            else:
+                scenes.append({"t": h["t"], "type": "kinetic", "text": "*%02d* %s" % (k + 1, names[k]), "_why": "numbered section opener %d" % (k + 1)})
+    # detail: each section becomes one bulletin card (the section name, then each point as it is said)
+    if mode.get("detail") == "bulletin" and heads:
+        total_ = script.get("duration") or (beats[-1]["end"] + 0.6 if beats else 30)
+        ends = [h["t"] for h in heads[1:]] + [next((b["t"] for b in beats if b["role"] == "cta" and b["t"] > heads[-1]["t"]), total_)]
+        for k, h in enumerate(heads):
+            sec = [b for b in beats if h["end"] - 0.05 <= b["t"] < ends[k] - 0.05]
+            if not sec:
+                continue
+            scenes[:] = [x for x in scenes if not (sec[0]["t"] - 0.05 <= x["t"] < ends[k] - 0.05)]
+            for c in range(0, len(sec), 4):
+                chunk = sec[c:c + 4]
+                scenes.append({"t": chunk[0]["t"], "type": "rules", "title": names[k].upper(), "sub": "%s %02d%s" % (one, k + 1, " · continued" if c else ""),
+                               "items": [_point(b["say"]) for b in chunk], "at": [round(b["t"] - chunk[0]["t"] + .15, 2) for b in chunk],
+                               "_why": "bulletin card for %s: one line per point, on its words" % names[k]})
+    # hook: the N things up front, on screen from the first frame
+    if mode.get("hook") == "list":
+        items = names if len(heads) >= 2 else next((s.get("items") for s in scenes if isinstance(s.get("items"), list) and s["items"] and isinstance(s["items"][0], str)), [])
+        if len(items) >= 2:
+            first = heads[0]["t"] if heads else 4.0
+            scenes[:] = [s for s in scenes if s["t"] >= first - 0.25]
+            scenes.insert(0, {"t": 0, "type": "rules", "title": "%d %s" % (len(items), word), "sub": _short(beats[0]["say"], 6) if beats else "",
+                              "items": items[:5], "at": [round(.35 + .6 * i, 2) for i in range(min(5, len(items)))], "_why": "hook: the %d %s up front" % (len(items), word.lower())})
+        else:
+            notes.append("hook 'list' needs two or more sections or a list; kept the drafted hook")
+    # backdrops: the section's own picture behind it (dimmed), the brand background elsewhere
+    style = mode.get("backdrop")
+    total = script.get("duration") or (beats[-1]["end"] + 0.6 if beats else 30)
+    if images and heads:
+        bds, edges = [], [h["t"] for h in heads] + [next((b["t"] for b in beats if b["role"] == "cta"), total)]
+        if style:
+            bds.append({"style": style, "t": 0, "end": round(edges[0] + .3, 2), "fadeIn": 0})
+        for k in range(len(heads)):
+            bds.append({"src": images[k % len(images)].relative_to(p).as_posix(), "t": round(edges[k] - .3, 2), "end": round(edges[k + 1] + .3, 2), "dim": .6, "blur": 2})
+        if style:
+            bds.append({"style": style, "t": round(edges[-1] - .3, 2), "end": round(total, 2), "fadeOut": 0})
+        script["backdrops"] = bds
+    elif style:
+        script["backdrops"] = [{"style": style, "t": 0, "end": round(total, 2), "fadeIn": 0, "fadeOut": 0}]
+    # theme: the brand's colour (or the mode's own), also for the style-pack scenes
+    theme = dict(mode.get("theme") or {})
+    if brand.get("theme", {}).get("accent") and "accent" not in theme:
+        theme.update(accent=brand["theme"]["accent"], pack=brand["theme"]["accent"])
+    if theme:
+        script["theme"] = theme
+    if (brand.get("logo_light") or brand.get("logo")) and not script.get("logo"):
+        script["logo"] = brand.get("logo_light") if style in ("brand", "crimson", "night") and brand.get("logo_light") else brand.get("logo")
+    # captions (they are the transcript: only with word timings)
+    if mode.get("captions") and words:
+        script["captions"] = mode["captions"]
+    elif "captions" in script and not mode.get("captions"):
+        script.pop("captions")
+    # news strap: label, who it is about, a ticker with the headline, the sections and the licence numbers
+    if mode.get("news"):
+        who = next((m.group(0) for m in [re.search(r"\b(?:Migration|Department|Home Affairs|Government|Council|University|Ministry)(?: [A-Z][\w&'-]+){0,3}", " ".join(b["say"] for b in beats[:3]))] if m), "") or brand.get("name", "Update")
+        ticker = [_short(beats[1]["say"] if len(beats) > 1 else beats[0]["say"], 9)] + names
+        if brand.get("name"):
+            ticker.append(brand["name"] + (" · MARN " + " · ".join(marn) if marn else ""))
+        script["news"] = {"label": mode["news"].get("label", "BREAKING"), "kicker": who.strip()[:28], "ticker": [t for t in ticker if t]}
+    # ending: QR card, licence numbers under it
+    cta = next((s for s in scenes if s["type"] == "cta"), None)
+    if cta is not None:
+        if mode.get("cta") == "qr" and extras.get("qr"):
+            cta["qr"], cta["qrLabel"] = extras["qr"], "Scan to book"
+            cta["text"] = cta.get("text") or "Book a consultation"
+        if marn:
+            cta["sub"] = "MARN " + " · ".join(marn)
+    elif mode.get("cta") == "qr" and extras.get("qr"):
+        last = next((b for b in reversed(beats) if b["role"] == "cta"), beats[-1] if beats else None)
+        if last:
+            scenes.append({"t": last["t"], "type": "cta", "text": _short(last["say"], 4) or "Book a consultation", "qr": extras["qr"], "qrLabel": "Scan to book",
+                           **({"sub": "MARN " + " · ".join(marn)} if marn else {}), "_why": "ending: booking QR"})
+    if mode.get("licences") and not marn and brand:
+        notes.append("no licence numbers found on the brand's site: if this business must show one (e.g. MARN), add it by hand")
+    scenes.sort(key=lambda s: s["t"])
+    return notes
+
+
+def cmd_modes(a):
+    for name, m in load_modes().items():
+        need = ", ".join("%s=%s" % kv for kv in (m.get("needs") or {}).items()) or "any content"
+        print("%-18s %s\n%-18s %s\n%-18s listens for: %s  (needs: %s)\n" % (name, m.get("label", ""), "", m.get("description", ""), "", ", ".join(m.get("when", [])[:10]), need))
+    print("use: python tools/shorts.py direct <name> --video clip.mp4 --mode <name>   (or --mode auto: the director picks)")
+
+
 # ---------- direct: one command from footage (or a script) to a first draft of the whole edit ----------
 # Places the draft can put on a map without a network: name -> (lat, lon). Extend freely.
 GAZETTEER = {
@@ -1391,9 +1596,21 @@ def _short(text, n=3):
             ws.append(w)
     while ws and ws[0].lower() in STOP:
         ws.pop(0)
+    ws = ws[:n]
     while ws and ws[-1].lower() in STOP:
         ws.pop()
-    return " ".join(ws[:n])
+    return " ".join(ws)
+
+
+def _point(sent, n=16):
+    """One sentence as a bulletin line: the first clause, at most n words ("..." when cut)."""
+    t = re.sub(r"^(?:and|but|so|now|also)\s*,?\s+", "", sent.strip(), flags=re.I).rstrip(".!?")
+    words_ = t.split()
+    if len(words_) > n:
+        cut = " ".join(words_[:n])
+        comma = cut.rfind(",")
+        t = (cut[:comma] if comma > len(cut) // 2 else cut).rstrip(",;:") + "…"
+    return t[:1].upper() + t[1:]
 
 
 def _items(sent):
@@ -1420,6 +1637,9 @@ def _places(sent):
     low = " " + re.sub(r"[^\w ]", " ", sent.lower()) + " "
     found = []
     for name in sorted(GAZETTEER, key=len, reverse=True):
+        # "Nepal Festival", "Melbourne Cup": a place inside a bigger proper name is not a place to pin
+        if re.search(r"\b%s\s+(?!And\b|To\b|Or\b)[A-Z][a-z]" % re.escape(name.title()), sent):
+            continue
         if " %s " % name in low and not any(name in f for f in found):
             found.append(name)
     return sorted(found, key=lambda n: low.find(" %s " % n))
@@ -1432,7 +1652,7 @@ def _kin(key):
     return " ".join(ws[:-1] + ["*%s*" % ws[-1]]) if len(ws) > 1 else "*%s*" % ws[0]
 
 
-def _draft(p, plan, words, presenter, frame, style, has_voice):
+def _draft(p, plan, words, presenter, frame, style, has_voice, mode=None, extras=None):
     """Turn plan.json beats into script.js: scenes with real content, timed to the words, and camera moves on the footage."""
     W, H = (1920, 1080) if frame == "landscape" else (1080, 1920)
     fmt = plan["format"]
@@ -1627,7 +1847,10 @@ def _draft(p, plan, words, presenter, frame, style, has_voice):
         script["captions"] = {"style": "pill"}
     if not presenter and "captions" in script and not words:
         script.pop("captions")
-    head = ["// FIRST DRAFT written by `python tools/shorts.py direct` from plan.json (format: %s, frame: %s)." % (fmt, frame),
+    mode_notes = _apply_mode(p, mode, scenes, script, beats, words, presenter, frame, extras or {}) if mode else []
+    for n_ in mode_notes:
+        print("NOTE: " + n_)
+    head = ["// FIRST DRAFT written by `python tools/shorts.py direct` from plan.json (format: %s, frame: %s%s)." % (fmt, frame, ", mode: " + mode.get("_name", "") if mode else ""),
             "// Every scene and move says why it is there. Read the contact sheet (qa/sheet.jpg), then fix wording, swap scenes,",
             "// add photos / screens / b-roll where a note asks for them, and render. Field reference: python tools/shorts.py guide",
             "window.SCRIPT = {"]
@@ -1718,10 +1941,37 @@ def cmd_direct(a):
     if (p / "words.js").exists():
         m = re.search(r"window\.WORDS\s*=\s*(\[.*\]);", (p / "words.js").read_text(encoding="utf-8"), re.S)
         words = json.loads(m.group(1)) if m else []
+        if a.script:
+            n_fixed = _fix_spelling(p, pathlib.Path(a.script).read_text(encoding="utf-8"))
+            if n_fixed:
+                print("spelling: %d words in the transcript now follow the script" % n_fixed)
+                m = re.search(r"window\.WORDS\s*=\s*(\[.*\]);", (p / "words.js").read_text(encoding="utf-8"), re.S)
+                words = json.loads(m.group(1)) if m else words
         if not a.script:
             (p / "transcript.txt").write_text(" ".join(w["w"] for w in words), encoding="utf-8")
+    # 4b. design mode: named, or picked from the content
+    mode, mode_name = None, None
+    text_all = (pathlib.Path(a.script).read_text(encoding="utf-8") if a.script else " ".join(w["w"] for w in words))
+    seconds = words[-1]["e"] if words else len(text_all.split()) / 2.6
+    if a.mode and a.mode != "none":
+        modes = load_modes()
+        if a.mode == "auto":
+            mode_name, why = pick_mode(text_all, presenter, has_voice, seconds)
+            step("design mode: %s  (%s)" % (mode_name or "none, the format decides", why))
+        elif a.mode in modes:
+            mode_name = a.mode
+            step("design mode: %s  (asked for)" % mode_name)
+        else:
+            sys.exit("unknown mode '%s'. Modes: %s  (python tools/shorts.py modes)" % (a.mode, ", ".join(modes)))
+        if mode_name:
+            mode = dict(modes[mode_name], _name=mode_name)
+    extras = {}
+    if a.qr:
+        q = pathlib.Path(a.qr)
+        shutil.copy(q, p / ("qr" + q.suffix.lower()))
+        extras["qr"] = "qr" + q.suffix.lower()
     # 5. config answers the setup would otherwise ask
-    fmt = a.format
+    fmt = a.format if a.format != "auto" or not mode else mode.get("format", "auto")
     sets = ["presenter=%s" % ("yes, footage provided" if presenter else "no"),
             "voice_source=%s" % ("the presenter's own audio" if presenter and has_voice else "i provide an audio file" if has_voice else "no voice (captions and music only)")]
     if fmt != "auto":
@@ -1739,7 +1989,7 @@ def cmd_direct(a):
         plan["duration"] = round(max(plan["duration"], words[-1]["e"] + 0.6), 1)
     # 7. the draft
     step("write the first draft: script.js")
-    scenes, moves = _draft(p, plan, words, presenter, frame, a.style, has_voice)
+    scenes, moves = _draft(p, plan, words, presenter, frame, a.style, has_voice, mode, extras)
     for sc in scenes:
         print("  %6.2fs  %-9s %s" % (sc["t"], sc["type"], json.dumps({k: v for k, v in sc.items() if k not in ("t", "type", "end")}, ensure_ascii=False)[:100]))
     for m in moves:
@@ -1880,6 +2130,9 @@ def main():
     di.add_argument("--from", dest="start", type=float, help="use the footage from this second"); di.add_argument("--to", dest="end", type=float, help="... to this second")
     di.add_argument("--model", default="small", help="speech model for the transcript"); di.add_argument("--language")
     di.add_argument("--no-cutout", action="store_true", help="skip cutting the person out")
+    di.add_argument("--mode", default="auto", help="design mode (python tools/shorts.py modes), 'auto' = picked from the content, 'none' = the format alone")
+    di.add_argument("--qr", help="a QR code image for the closing card (e.g. a booking link)")
+    sub.add_parser("modes", help="list the design modes `direct --mode` can use")
     gd = sub.add_parser("guide", help="the brief, scene types and commands"); gd.add_argument("--json", action="store_true")
     sub.add_parser("doctor", help="what this machine can do")
     r = sub.add_parser("render"); r.add_argument("project"); r.add_argument("--fps", type=int, default=30)
@@ -1911,7 +2164,7 @@ def main():
     a = ap.parse_args()
     {"new": cmd_new, "segments": cmd_segments, "sheet": cmd_sheet, "render": cmd_render,
      "capture": cmd_capture, "frames": cmd_frames, "config": cmd_config, "backdrop": cmd_backdrop,
-     "brand": cmd_brand, "plan": cmd_plan, "direct": cmd_direct, "lint": cmd_lint, "align": cmd_align, "voice": cmd_voice, "guide": cmd_guide, "doctor": cmd_doctor}[a.cmd](a)
+     "brand": cmd_brand, "plan": cmd_plan, "direct": cmd_direct, "modes": cmd_modes, "lint": cmd_lint, "align": cmd_align, "voice": cmd_voice, "guide": cmd_guide, "doctor": cmd_doctor}[a.cmd](a)
 
 
 main()
