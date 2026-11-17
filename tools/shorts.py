@@ -55,7 +55,7 @@ CONFIG_QUESTIONS = [
     ("caption_language", "What language should the on-screen captions be?", ["english", "nepali", "same as the voice"], "english"),
     ("voice_source", "Where does the voiceover come from?", ["i provide an audio file", "generate it with a voice service I have (e.g. ElevenLabs)", "the presenter's own audio", "no voice (captions and music only)"], "i provide an audio file"),
     ("voice_name", "Voice name (only if generating; leave blank otherwise)", None, ""),
-    ("format", "What kind of short?", ["data explainer (voice, bold captions, charts and sources)", "product film (big type, 3D phone, cards; little or no voice)", "creator explainer (presenter intercut with a mind map, notes and screen recordings)", "split explainer (presenter card below, diagram panel above, one-word captions)", "story b-roll (full-screen footage with small spoken captions)", "match a reference video I will give you"], "data explainer (voice, bold captions, charts and sources)"),
+    ("format", "What kind of short?", ["data explainer (voice, bold captions, charts and sources)", "product film (big type, 3D phone, cards; little or no voice)", "creator explainer (presenter intercut with a mind map, notes and screen recordings)", "split explainer (presenter card below, diagram panel above, one-word captions)", "story b-roll (full-screen footage with small spoken captions)", "crimson explainer (presenter, black-to-red glass cards, diamonds, numbered lanes)", "match a reference video I will give you"], "data explainer (voice, bold captions, charts and sources)"),
     ("presenter", "Is there a person on camera?", ["no", "yes, footage provided"], "no"),
     ("brand", "Is this for a brand? Give its website (the logo, colours and name are read from it), or 'none' for a clean neutral design", None, "none"),
     ("look", "Visual look", ["auto (the brand's colours if a brand is given, otherwise clean)", "clean", "dark", "warm"], "auto (the brand's colours if a brand is given, otherwise clean)"),
@@ -975,7 +975,7 @@ async def lint(p):
             if sc.get(key) in (None, "", []):
                 add("error", "missing-field", "%s scene needs `%s`" % (sc["type"], key), sc.get("t"))
         n_items = len(sc.get("items") or sc.get("points") or [])
-        limits = {"chart": 6, "compare": 3, "list": 5, "timeline": 5, "line": 8, "badges": 3, "pills": 6, "glass": 5, "stickies": 5, "tags": 3}
+        limits = {"chart": 6, "compare": 3, "list": 5, "timeline": 5, "line": 8, "badges": 3, "pills": 6, "glass": 5, "stickies": 5, "tags": 3, "pillar": 4, "diamonds": 4, "lanes": 6, "rules": 4}
         if n_items > limits.get(sc["type"], 99):
             add("warn", "too-much", "%s has %d items; more than %d does not read on a phone" % (sc["type"], n_items, limits[sc["type"]]), sc.get("t"))
         if sc["type"] == "chart" and not sc.get("note"):
@@ -1200,8 +1200,13 @@ DESIGNS = {   # role -> scene per format: (type, layout, why)
                        "cta": ("cta", "full", "the face, one action, a quoted keyword if there is one"), "point": ("presenter", "full", "full-screen presenter with one-word captions")},
     "story b-roll":   {"hook": ("broll", "full", "the most striking clip first"), "point": ("broll", "full", "one clip per sentence"), "cta": ("cta", "full", "one clear action"),
                        "example": ("screen", "full", "the screen recording"), "steps": ("screen", "full", "the screen recording, zoomed to the click"), "number": ("bignum", "full", "the number over the clip")},
+    "crimson explainer": {"hook": ("kinetic", "full", "the claim in big words on the crimson background, one word blurring in at a time"), "number": ("bignum", "full", "the figure huge behind the head, a small lead word above it"),
+                       "definition": ("callout", "full", "name the thing beside the head in a red pill"), "problem": ("kinetic", "full", "the key sentence with the painful phrase in red"),
+                       "example": ("screen", "full", "the real example on a glass panel over crimson"), "steps": ("diamonds", "full", "numbers in red diamonds, names first, meanings as each is explained"), "list": ("pillar", "full", "a glass pillar card per part of the framework"),
+                       "compare": ("lanes", "full", "one numbered lane per option, the camera moving on each cue"), "payoff": ("rules", "full", "the checklist as red numbered pills"),
+                       "cta": ("cta", "full", "one clear action"), "point": ("presenter", "full", "back to the face between sections")},
 }
-LENGTHS = {"data explainer": (20, 45), "product film": (12, 20), "creator explainer": (30, 60), "split explainer": (45, 90), "story b-roll": (30, 90)}
+LENGTHS = {"data explainer": (20, 45), "product film": (12, 20), "creator explainer": (30, 60), "split explainer": (45, 90), "story b-roll": (30, 90), "crimson explainer": (45, 90)}
 
 
 def _keywords(sent, n=3):
@@ -1293,7 +1298,8 @@ def cmd_plan(a):
         b["note"] = (b.get("note", "") + " Same scene type as the beat before: make it one scene that keeps building, or vary it.").strip()
     script_keys = {"data explainer": {}, "product film": {"audio": None, "backdrops": "style: white -> sky -> night -> white, changing with the story"},
                    "creator explainer": {"captions": {"style": "pill"}}, "split explainer": {"captions": {"style": "word", "pos": "split"}},
-                   "story b-roll": {"captions": {"style": "outline"}}}[fmt]
+                   "story b-roll": {"captions": {"style": "outline"}},
+                   "crimson explainer": {"backdrops": "style: crimson behind every full-screen graphic; the presenter footage between sections", "theme": {"accent": "#E3202E"}}}[fmt]
     plan = {"project": p.name, "format": fmt, "format_reason": why_fmt, "duration": round(total, 1), "timing": "word times from words.js" if timed else "estimated at about 170 words a minute (run `align` for real times)",
             "script_keys": script_keys, "notes": notes, "beats": beats}
     (p / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -32,7 +32,7 @@
     "duration": "seconds; only needed when there is no voice",
     "presenter": "talking-head clip in the project folder, or null",
     "presenterOffset": "seconds to skip at the start of the presenter clip",
-    "backdrops": "[{ src, t, end, zoom, pan, focus, dim, blur, fadeIn, fadeOut }] image/video files, or built-in backgrounds [{ style:'white' | 'sky' | 'night' | 'brand' | 'paper', t, end, ink:'dark' | 'light' }]",
+    "backdrops": "[{ src, t, end, zoom, pan, focus, dim, blur, fadeIn, fadeOut }] image/video files, or built-in backgrounds [{ style:'white' | 'sky' | 'night' | 'brand' | 'paper' | 'crimson', t, end, ink:'dark' | 'light' }]",
     "moves": "presenter only, needs a matte: [{ t, end, mode:'anchor', scale:0.6, side:'right'|'left'|'center' }, { t, mode:'punch', amount:0.12 }]",
     "scenes": "the list of scenes below",
     "captions": "{ style:'pill' | 'outline' | 'bold' | 'word', words:4, pos:'low' | 'mid' | 'split' } spoken captions built from words.js, each word turning solid as it is said ('word' = one word at a time); only when captions are in the voice's language",
@@ -506,6 +506,71 @@
         "gap"
       ],
       "notes": "Up to 8 short items."
+    },
+    "pillar": {
+      "use": "one part of a named framework on a frosted glass card: kicker 'Pillar 2', a title that types on, then each item and its one-line meaning (crimson explainer)",
+      "required": [
+        "title"
+      ],
+      "optional": [
+        "kicker",
+        "items",
+        "at",
+        "gap",
+        "subAt"
+      ],
+      "notes": "items:[{name, sub}] 2-4. Put each name on the word that says it and its sub on the sentence that explains it. One pillar card per part, same layout every time."
+    },
+    "diamonds": {
+      "use": "a short set of principles, each number in a red diamond with a title and a one-line meaning (crimson explainer)",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "at",
+        "gap",
+        "subAt",
+        "img"
+      ],
+      "notes": "items:[{name, sub}] 2-4. When the speaker lists them fast and then explains each, give the names early (at) and let the subs land on the explanations. img = presenter clip or photo in a small card bottom-right."
+    },
+    "lanes": {
+      "use": "pick-one options as numbered lanes: dashed dividers, a lit floor, huge numbers with a reflection, the camera moving lane to lane (crimson explainer)",
+      "required": [
+        "items"
+      ],
+      "optional": [
+        "label",
+        "at",
+        "gap",
+        "width"
+      ],
+      "notes": "items:[{title, subs:[..]}] 3-6; at:[s..] = on each 'first / second / third' cue. label: small heading top left."
+    },
+    "rules": {
+      "use": "a checklist of rules: a big count title, a subtitle and red numbered pills (crimson explainer)",
+      "required": [
+        "title",
+        "items"
+      ],
+      "optional": [
+        "sub",
+        "at",
+        "gap"
+      ],
+      "notes": "title like '3 RULES'; items 2-4 short lines, each on its spoken cue."
+    },
+    "callout": {
+      "use": "name what is on screen: a red pill with a drawn curve pointing at the person or a detail (crimson explainer)",
+      "required": [
+        "text"
+      ],
+      "optional": [
+        "at",
+        "to",
+        "bend"
+      ],
+      "notes": "at:[x,y] pill centre px, to:[x,y] where the curve ends. 1-3 words. Keep it off the face."
     }
   },
   "common_scene_keys": [
@@ -529,6 +594,7 @@
     "product film": "no presenter, little or no voice: kinetic type, 3D phone, cards, orb, glass card; the background changes with the story (white -> sky -> night -> white), 12-20 s. Example: projects/shorts-kinetic-reference",
     "creator explainer": "a presenter intercut with full-screen graphics: mindmap on paper, stickies, tags, screen recordings, spoken captions (captions:{style:'pill'}), 30-60 s",
     "story b-roll": "full-screen footage or generated clips (broll / backdrops) with small spoken captions (captions:{style:'outline'}), then presenter or screen scenes",
-    "split explainer": "a presenter in a card at the bottom, a black panel above with a section title (head) and a diagram that builds (orbit, skeleton, picklist, line, phone, chart...), one-word captions between them (captions:{style:'word',pos:'split'}); cut to the full-screen presenter between sections. Give every panel scene split:true. 45-90 s"
+    "split explainer": "a presenter in a card at the bottom, a black panel above with a section title (head) and a diagram that builds (orbit, skeleton, picklist, line, phone, chart...), one-word captions between them (captions:{style:'word',pos:'split'}); cut to the full-screen presenter between sections. Give every panel scene split:true. 45-90 s",
+    "crimson explainer": "a presenter in a warm room intercut with full-screen black-to-red graphics (backdrops style:'crimson'): frosted glass pillar cards, red diamond lists, numbered lanes, rule pills, red callouts naming things beside the head, huge words behind the head. Every spoken framework gets its own card, built on the words that name it. 45-90 s"
   }
 }

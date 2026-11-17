@@ -406,6 +406,53 @@ body[data-layer="bd"] #vis, body[data-layer="bd"] #caps, body[data-layer="bd"] #
 .glass .gr{display:flex;gap:26px;align-items:center;padding:26px 46px;font-family:var(--kfont);font-weight:500;font-size:44px;color:var(--capink)}
 .glass .gi{flex:none;width:52px;text-align:center}
 
+/* ===== style pack D: crimson explainer (black-to-red glow, frosted glass cards, red diamonds, numbered lanes, rule pills) ===== */
+#stage{ --cr:#E3202E; --crd:#7A0A12; }
+.bd-style.crimson{background:radial-gradient(130% 52% at 50% 112%,var(--cr) 0%,color-mix(in srgb,var(--cr) 55%,#2a0004) 38%,transparent 72%),radial-gradient(90% 40% at 50% 100%,color-mix(in srgb,var(--cr) 35%,#000) 0%,transparent 80%),linear-gradient(#050102,#120204 45%,#2a0408)}
+.cx{font-family:var(--kfont);color:#fff}
+.pillar{display:flex;align-items:center;justify-content:center}
+.pillar .pc{position:relative;width:880px;min-height:560px;padding:56px 64px 64px;border-radius:46px;border:2px solid rgba(255,255,255,.62);background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.03) 55%,color-mix(in srgb,var(--cr) 22%,transparent));box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 0 46px rgba(255,255,255,.16),0 40px 120px rgba(0,0,0,.45);overflow:hidden}
+.pillar .k{font-weight:400;font-size:40px;letter-spacing:-.01em;opacity:.9}
+.pillar .tt{font-weight:600;font-size:84px;letter-spacing:-.04em;line-height:1.02;margin:4px 0 46px}
+.pillar .tt .ch{display:inline-block;white-space:pre}
+.pillar .it{margin-top:30px}
+.pillar .it b{display:block;font-weight:500;font-size:56px;letter-spacing:-.03em;line-height:1.05}
+.pillar .it span{display:block;font-weight:400;font-size:32px;letter-spacing:-.01em;opacity:.78;margin-top:6px}
+.pillar .streak{position:absolute;left:-30%;top:46%;width:60%;height:26px;border-radius:13px;background:linear-gradient(90deg,transparent,var(--cr),color-mix(in srgb,var(--cr) 50%,#fff),transparent);filter:blur(10px);transform:rotate(8deg)}
+.diamonds .dl{position:absolute;left:90px;right:var(--safe-right);top:430px}
+.diamonds .dr{display:flex;gap:46px;align-items:flex-start;margin-bottom:64px}
+.diamonds .dm{position:relative;flex:none;width:150px;height:150px;display:grid;place-items:center}
+.diamonds .dm::before{content:"";position:absolute;inset:22px;border:7px solid var(--cr);border-radius:12px;transform:rotate(45deg);box-shadow:0 0 30px color-mix(in srgb,var(--cr) 70%,transparent),inset 0 0 20px color-mix(in srgb,var(--cr) 45%,transparent)}
+.diamonds .dm i{position:relative;font-style:normal;font-weight:800;font-size:104px;line-height:1;letter-spacing:-.04em;color:#fff;text-shadow:0 4px 20px rgba(0,0,0,.5);transform:translateY(16px)}
+.diamonds .dt{padding-top:20px}
+.diamonds .dt b{display:block;font-weight:700;font-size:66px;letter-spacing:-.035em;line-height:1.05}
+.diamonds .dt span{display:block;font-weight:400;font-size:34px;line-height:1.25;opacity:.85;margin-top:10px}
+.diamonds .pip{position:absolute;right:var(--safe-right);bottom:var(--safe-bottom);width:300px;height:380px;border-radius:26px;overflow:hidden;border:3px solid rgba(255,255,255,.55);box-shadow:0 30px 70px rgba(0,0,0,.5)}
+.diamonds .pip img,.diamonds .pip video{width:100%;height:100%;object-fit:cover}
+.lanes{overflow:hidden}
+.lanes .lbl{position:absolute;left:60px;top:var(--safe-top);font-weight:500;font-size:30px;opacity:.85}
+.lanes .world{position:absolute;left:0;top:0;height:100%}
+.lanes .ln{position:absolute;top:0;height:100%;width:2px;border-left:3px dashed rgba(255,255,255,.75)}
+.lanes .ln::after{content:"";position:absolute;left:-17px;top:1452px;width:28px;height:28px;background:#fff;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);box-shadow:0 0 20px #fff}
+.lanes .floor{position:absolute;left:-200px;top:1465px;height:4px;background:linear-gradient(90deg,transparent,#fff 8%,#fff 92%,transparent);box-shadow:0 0 24px rgba(255,255,255,.8)}
+.lanes .ls{position:absolute;top:560px;width:420px;padding-left:40px}
+.lanes .ls b{display:block;font-weight:600;font-size:56px;letter-spacing:-.03em;line-height:1.05}
+.lanes .ls span{display:block;font-weight:400;font-size:32px;line-height:1.35;opacity:.85}
+.lanes .ls .lsub{margin-top:28px}
+.lanes .num{position:absolute;top:1010px;width:420px;text-align:center;font-weight:800;font-size:460px;line-height:1;letter-spacing:-.06em;background:linear-gradient(180deg,#fff 30%,color-mix(in srgb,var(--cr) 40%,#fff) 70%,rgba(255,255,255,.15));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lanes .num.rf::before{content:attr(data-n)}   /* drawn by CSS: the reflection is decoration and may run off the bottom */
+.lanes .num.rf{top:1475px;transform:scaleY(-1);opacity:.22;-webkit-mask-image:linear-gradient(transparent 55%,#000);mask-image:linear-gradient(transparent 55%,#000)}
+.rules .rp{position:absolute;left:0;right:0;top:0;bottom:0;padding:calc(var(--safe-top) + 260px) var(--safe-right) 0 90px}
+.rules .rt{font-weight:800;font-size:150px;letter-spacing:-.05em;line-height:.95}
+.rules .rs{font-weight:500;font-size:50px;letter-spacing:-.02em;margin:18px 0 60px;opacity:.95}
+.rules .rr{display:flex;align-items:center;gap:30px;margin-bottom:30px;padding:26px 40px;border-radius:24px;background:linear-gradient(90deg,var(--cr),color-mix(in srgb,var(--cr) 55%,#300)) ;box-shadow:0 0 0 2px color-mix(in srgb,var(--cr) 60%,#fff) inset,0 18px 50px color-mix(in srgb,var(--cr) 35%,transparent)}
+.rules .rr i{font-style:normal;font-weight:800;font-size:84px;line-height:1;letter-spacing:-.04em}
+.rules .rr span{font-weight:500;font-size:44px;letter-spacing:-.02em;line-height:1.15}
+.rules .silk{position:absolute;right:-260px;bottom:-120px;width:900px;height:900px;border-radius:50%;background:conic-gradient(from 200deg,transparent,var(--cr) 18%,#300 30%,transparent 42%,color-mix(in srgb,var(--cr) 70%,#fff) 55%,transparent 64%);filter:blur(40px);opacity:.9}
+.callout .cp{position:absolute;padding:20px 44px;border-radius:999px;background:linear-gradient(180deg,color-mix(in srgb,var(--cr) 85%,#fff),var(--cr));border:2px solid rgba(255,255,255,.5);font-weight:600;font-size:52px;letter-spacing:-.02em;white-space:nowrap;box-shadow:0 0 34px color-mix(in srgb,var(--cr) 60%,transparent);transform:translate(-50%,-50%)}
+.callout svg{position:absolute;left:0;top:0;width:1080px;height:1920px;overflow:visible}
+.callout path{fill:none;stroke:#fff;stroke-width:4;stroke-linecap:round}
+
 /* ===== style pack B: creator explainer (mind map on paper, sticky notes, oval tags, small pill captions) ===== */
 .mindmap{overflow:hidden}
 .mindmap .world{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0}
@@ -857,6 +904,76 @@ const B = {
       tl.to(el.querySelector('.gc'),{scale:1.06,duration:5,ease:'none'},t+.55);
     }, out(tl,t){ tl.to(el,{autoAlpha:0,scale:.94,duration:.25},t-.25); } };
   },
+  // ---------- style pack D: crimson explainer (pair with backdrops [{ style:'crimson' }]) ----------
+  pillar(sc){
+    // kicker:'Pillar 1', title, items:[{ name, sub } | 'name'], at:[s..] (seconds after t per item), subAt: delay before each sub
+    const its = (sc.items||[]).map(x => typeof x === 'string' ? {name:x} : x);
+    const el = h(`<div class="abs full pillar cx"><div class="pc"><div class="streak"></div>${sc.kicker?`<div class="k">${esc(sc.kicker)}</div>`:''}<div class="tt">${[...String(sc.title||'')].map(c=>`<span class="ch">${esc(c)}</span>`).join('')}</div>${its.map(x=>`<div class="it"><b>${esc(x.name)}</b>${x.sub?`<span>${esc(x.sub)}</span>`:''}</div>`).join('')}</div></div>`);
+    return { el, inn(tl,t){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
+      tl.fromTo(el.querySelector('.pc'),{autoAlpha:0,scale:.9,filter:'blur(20px)',y:60},{autoAlpha:1,scale:1,filter:'blur(0px)',y:0,duration:.5,ease:'power3.out'},t);
+      tl.fromTo(el.querySelectorAll('.k'),{autoAlpha:0,y:12},{autoAlpha:1,y:0,duration:.3},t+.2);
+      tl.fromTo(el.querySelectorAll('.tt .ch'),{autoAlpha:0},{autoAlpha:1,duration:.01,stagger:.045},t+.3);   // the title types on
+      tl.fromTo(el.querySelector('.streak'),{x:0,autoAlpha:1},{x:1500,autoAlpha:0,duration:.9,ease:'power2.inOut'},t+.15);
+      el.querySelectorAll('.it').forEach((r,i) => { const ti = t + ((sc.at||[])[i] ?? (.9 + i*(sc.gap ?? .7)));
+        tl.fromTo(r.querySelector('b'),{autoAlpha:0,filter:'blur(12px)',x:-20},{autoAlpha:1,filter:'blur(0px)',x:0,duration:.35,ease:'power3.out'},ti);
+        const s = r.querySelector('span'); if (s) tl.fromTo(s,{autoAlpha:0,y:10},{autoAlpha:.78,y:0,duration:.3},ti + (sc.subAt ?? .35)); });
+      tl.fromTo(el.querySelector('.pc'),{scale:1},{scale:1.04,duration:6,ease:'none'},t+.5);
+    }, out(tl,t){ tl.to(el,{autoAlpha:0,filter:'blur(14px)',duration:.28},t-.28); } };
+  },
+  diamonds(sc){
+    // items:[{ name, sub } | 'name'] numbered rows in red diamonds (2-4); at:[s..]; img: small framed photo/clip bottom-right
+    const its = (sc.items||[]).map(x => typeof x === 'string' ? {name:x} : x);
+    const pip = sc.img ? `<div class="pip">${/\.(mp4|webm|mov|m4v)$/i.test(sc.img) ? `<video src="${esc(sc.img)}" muted playsinline preload="auto" loop></video>` : `<img src="${esc(sc.img)}">`}</div>` : '';
+    const el = h(`<div class="abs full diamonds cx"><div class="dl">${its.map((x,i)=>`<div class="dr"><div class="dm"><i>${i+1}</i></div><div class="dt"><b>${esc(x.name)}</b>${x.sub?`<span>${esc(x.sub)}</span>`:''}</div></div>`).join('')}</div>${pip}</div>`);
+    return { el, inn(tl,t,end){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
+      window.MEDIA_EXTRA = window.MEDIA_EXTRA || []; el.querySelectorAll('video').forEach(v => window.MEDIA_EXTRA.push({v, t0: t, t1: end}));
+      el.querySelectorAll('.dr').forEach((r,i) => { const ti = t + ((sc.at||[])[i] ?? (i*(sc.gap ?? .35)));
+        tl.fromTo(r.querySelector('.dm'),{autoAlpha:0,scale:.3,rotation:-90},{autoAlpha:1,scale:1,rotation:0,duration:.45,ease:'back.out(1.8)'},ti);
+        tl.fromTo(r.querySelector('.dt b'),{autoAlpha:0,x:-30,filter:'blur(10px)'},{autoAlpha:1,x:0,filter:'blur(0px)',duration:.35,ease:'power3.out'},ti+.12);
+        const s = r.querySelector('.dt span'); if (s) tl.fromTo(s,{autoAlpha:0,y:10},{autoAlpha:.85,y:0,duration:.3},ti + (sc.subAt ?? .45)); });
+      tl.fromTo(el.querySelectorAll('.pip'),{autoAlpha:0,y:80,scale:.85},{autoAlpha:1,y:0,scale:1,duration:.5,ease:'power3.out'},t+.2);
+    }, out(tl,t){ tl.to(el,{autoAlpha:0,duration:.25},t-.25); } };
+  },
+  lanes(sc){
+    // label (small, top left), items:[{ title, subs:[..] }] numbered lanes; at:[s..] = when the camera reaches each lane
+    const its = sc.items || [], W = sc.width || 420, x0 = 120, n = its.length;
+    const el = h(`<div class="abs full lanes cx">${sc.label?`<div class="lbl">${esc(sc.label)}</div>`:''}<div class="world" style="width:${x0 + n*W + 600}px"><div class="floor" style="width:${x0 + n*W + 800}px"></div>${its.map((x,i)=>`<div class="ln" style="left:${x0 + i*W}px"></div><div class="ls" style="left:${x0 + i*W}px"><b>${esc(x.title)}</b><div class="lsub">${(x.subs||[]).map(s=>`<span>${esc(s)}</span>`).join('')}</div></div><div class="num" style="left:${x0 + i*W}px">${i+1}</div><div class="num rf" data-n="${i+1}" style="left:${x0 + i*W}px"></div>`).join('')}<div class="ln" style="left:${x0 + n*W}px"></div></div></div>`);
+    return { el, inn(tl,t){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
+      const world = el.querySelector('.world'), ls = el.querySelectorAll('.ls'), nums = el.querySelectorAll('.num:not(.rf)'), rfs = el.querySelectorAll('.num.rf');
+      tl.fromTo(el.querySelectorAll('.ln'),{scaleY:0,transformOrigin:'50% 76%'},{scaleY:1,duration:.5,stagger:.06,ease:'power2.out'},t);
+      tl.fromTo(el.querySelector('.floor'),{scaleX:0,transformOrigin:'0 50%'},{scaleX:1,duration:.6,ease:'power2.out'},t);
+      its.forEach((x,i) => tl.set([ls[i], nums[i], rfs[i]],{autoAlpha: x0 + (i+1)*W <= 940 ? .18 : 0},t));   // only lanes already in the frame show faintly
+      its.forEach((x,i) => { const ti = t + ((sc.at||[])[i] ?? (.3 + i*(sc.gap ?? 1.4)));
+        const cx = Math.min(0, 540 - (x0 + i*W + W/2));   // keep lane i in the middle of the frame
+        tl.to(world,{x:cx,duration:.7,ease:'power3.inOut'},ti);
+        if (i) tl.to([ls[i-1], nums[i-1], rfs[i-1]],{autoAlpha: x0 + (i-1)*W + cx >= 0 ? .35 : 0,duration:.3},ti);   // the lane just left stays faint while it is still whole on screen
+        if (i > 1) tl.to([ls[i-2], nums[i-2], rfs[i-2]],{autoAlpha:0,duration:.3},ti);   // lanes that left the frame
+        tl.to([ls[i], nums[i]],{autoAlpha:1,duration:.3},ti+.2); tl.to(rfs[i],{autoAlpha:.22,duration:.3},ti+.2);
+        tl.fromTo(nums[i],{y:120,filter:'blur(14px)'},{y:0,filter:'blur(0px)',duration:.55,ease:'power3.out'},ti+.15);
+        tl.fromTo(ls[i].querySelectorAll('.lsub span'),{autoAlpha:0,y:10},{autoAlpha:.85,y:0,duration:.25,stagger:.12},ti+.45); });
+    }, out(tl,t){ tl.to(el,{autoAlpha:0,duration:.25},t-.25); } };
+  },
+  rules(sc){
+    // title:'3 RULES', sub, items:[..] red pills numbered 1..n; at:[s..]
+    const el = h(`<div class="abs full rules cx"><div class="silk"></div><div class="rp"><div class="rt">${esc(sc.title||'')}</div>${sc.sub?`<div class="rs">${esc(sc.sub)}</div>`:''}${(sc.items||[]).map((x,i)=>`<div class="rr"><i>${i+1}</i><span>${esc(x)}</span></div>`).join('')}</div></div>`);
+    return { el, inn(tl,t,end){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
+      tl.fromTo(el.querySelector('.silk'),{rotation:-30,autoAlpha:0},{rotation:20,autoAlpha:.9,duration:Math.max(1,end-t),ease:'none'},t);
+      tl.fromTo(el.querySelector('.rt'),{autoAlpha:0,y:40,filter:'blur(16px)'},{autoAlpha:1,y:0,filter:'blur(0px)',duration:.4,ease:'power3.out'},t+.1);
+      tl.fromTo(el.querySelectorAll('.rs'),{autoAlpha:0,y:16},{autoAlpha:.95,y:0,duration:.3},t+.35);
+      el.querySelectorAll('.rr').forEach((r,i) => tl.fromTo(r,{autoAlpha:0,x:-80,scaleX:.6,transformOrigin:'0 50%'},{autoAlpha:1,x:0,scaleX:1,duration:.4,ease:'power3.out'},t+((sc.at||[])[i] ?? (.7+i*(sc.gap ?? .6)))));
+    }, out(tl,t){ tl.to(el,{autoAlpha:0,x:-60,duration:.28,ease:'power2.in'},t-.28); } };
+  },
+  callout(sc){
+    // text in a red pill at:[x,y] (px), a hand-drawn curve to to:[x,y]; use over the presenter or a picture
+    const [x,y] = sc.at || [360, 980], [tx,ty] = sc.to || [x + 220, y - 180];
+    const mx = (x + tx)/2 + (sc.bend ?? 60), my = Math.min(y, ty) - 80;
+    const el = h(`<div class="abs full callout cx"><svg><path d="M${x+(tx>x?120:-120)},${y-30} Q${mx},${my} ${tx},${ty}"/></svg><div class="cp" style="left:${x}px;top:${y}px">${esc(sc.text||'')}</div></div>`);
+    return { el, inn(tl,t){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
+      const p = el.querySelector('path'), L = 900; p.style.strokeDasharray = L;
+      tl.fromTo(el.querySelector('.cp'),{autoAlpha:0,scale:.6,filter:'blur(10px)'},{autoAlpha:1,scale:1,filter:'blur(0px)',duration:.35,ease:'back.out(2)'},t);
+      tl.fromTo(p,{strokeDashoffset:L},{strokeDashoffset:0,duration:.5,ease:'power2.out'},t+.2);
+    }, out(tl,t){ tl.to(el,{autoAlpha:0,duration:.22},t-.22); } };
+  },
   // ---------- style pack C: split explainer (use with split:true so the presenter sits in a card below) ----------
   orbit(sc){
     // items:[{ img | icon | text }] tiles on a ring (4-8), hub: text in the centre circle (hubAt seconds); the ring turns slowly
@@ -1092,7 +1209,7 @@ const bdsEl = document.getElementById('bds'), BDV = [];
 (S.backdrops || []).forEach(bd => {
   // style: 'white' | 'sky' | 'night' | 'brand' | 'paper' = a built-in background instead of a file; ink: 'dark' | 'light' text over it
   const t0 = bd.t ?? 0, t1 = bd.end ?? DUR, isVid = !bd.style && /\.(mp4|webm|mov|m4v)$/i.test(bd.src);
-  const lightInk = (bd.ink ?? (bd.style && !['night','brand'].includes(bd.style) ? 'dark' : 'light')) === 'light';
+  const lightInk = (bd.ink ?? (bd.style && !['night','brand','crimson'].includes(bd.style) ? 'dark' : 'light')) === 'light';
   const item = h(`<div class="bd-item">${bd.style ? `<div class="bd-style ${esc(bd.style)}"></div>` : isVid ? `<video src="${esc(bd.src)}" muted playsinline preload="auto" loop></video>` : `<img src="${esc(bd.src)}">`}<div class="bd-dim"></div></div>`);
   bdsEl.appendChild(item);
   const m = item.querySelector('img,video,.bd-style'), z = bd.zoom || (bd.style ? [1, 1] : [1, 1.14]), pan = bd.pan || 'none';
