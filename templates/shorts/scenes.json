@@ -303,8 +303,11 @@
       "optional": [
         "icon",
         "sub",
-        "shrink"
-      ]
+        "shrink",
+        "qr",
+        "qrLabel"
+      ],
+      "notes": "qr: an image of a QR code (e.g. a booking link) shown large on a white card so viewers can scan it off the screen; qrLabel: the line under it (default \"Scan to book\"). Hold it for at least 3 s."
     },
     "kinetic": {
       "use": "big words that carry the message on their own (product-film style)",

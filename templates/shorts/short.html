@@ -274,6 +274,11 @@ body{margin:0;background:#0d0d0d;display:flex;flex-direction:column;align-items:
 .cta{top:640px;text-align:center;padding:0 var(--safe-right)}
 .cta .e{font-size:200px;line-height:1}
 .cta .t{font-weight:900;font-size:96px;line-height:1.05;text-transform:uppercase;margin-top:30px;color:var(--capink);text-shadow:var(--capshadow)}
+.cta .qr{display:inline-block;background:#fff;border-radius:40px;padding:34px 34px 24px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.cta .qr img{display:block;width:460px;height:460px;image-rendering:pixelated}
+.cta .qr .ql{margin-top:14px;font-weight:800;font-size:40px;letter-spacing:.04em;text-transform:uppercase;color:#14161A}
+.cta.withqr{top:330px} .cta.withqr .t{font-size:78px;margin-top:40px}
+#stage[data-frame="landscape"] .cta.withqr{top:60px} #stage[data-frame="landscape"] .cta.withqr .qr img{width:400px;height:400px}
 .cta .s{display:inline-block;margin-top:36px;background:var(--accent);color:var(--onaccent);font-weight:800;font-size:48px;padding:18px 40px;border-radius:999px}
 
 /* web page B-roll: browser window, slow scroll, highlighter on the line being spoken */
@@ -1218,9 +1223,12 @@ const B = {
     }, out(tl,t){ tl.to(el,{autoAlpha:0,scale:.8,duration:.25},t-.25); } };
   },
   cta(sc){
-    const el = h(`<div class="abs cta">${sc.icon?`<div class="e">${sc.icon}</div>`:''}<div class="t">${esc(sc.text)}</div>${sc.sub?`<div class="s">${esc(sc.sub)}</div>`:''}</div>`);
+    // qr: an image of a QR code (e.g. a booking link) shown large on a white card so phones can scan it off the screen; qrLabel: line under it
+    const qr = sc.qr ? `<div class="qr"><img src="${esc(sc.qr)}"><div class="ql">${esc(sc.qrLabel || 'Scan to book')}</div></div>` : '';
+    const el = h(`<div class="abs cta ${sc.qr ? 'withqr' : ''}">${sc.icon && !sc.qr?`<div class="e">${sc.icon}</div>`:''}${qr}<div class="t">${esc(sc.text)}</div>${sc.sub?`<div class="s">${esc(sc.sub)}</div>`:''}</div>`);
     return { el, card:true, inn(tl,t){ tl.fromTo(el,{autoAlpha:0},{autoAlpha:1,duration:.01},t);
       tl.fromTo(el.querySelectorAll('.e'),{scale:0},{scale:1,duration:.5,ease:'back.out(2.2)'},t);
+      tl.fromTo(el.querySelectorAll('.qr'),{scale:.4,autoAlpha:0,rotation:-6},{scale:1,autoAlpha:1,rotation:0,duration:.55,ease:'back.out(1.7)'},t);
       tl.fromTo(el.querySelector('.t'),{y:60,autoAlpha:0},{y:0,autoAlpha:1,duration:.45,ease:'back.out(1.6)'},t+.2);
       tl.fromTo(el.querySelectorAll('.s'),{scale:.6,autoAlpha:0},{scale:1,autoAlpha:1,duration:.4,ease:'back.out(2)'},t+.6);
     }, out(tl,t){ tl.to(el,{autoAlpha:0,duration:.25},t-.25); } };
